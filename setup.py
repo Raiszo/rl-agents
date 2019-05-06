@@ -2,5 +2,5 @@ from setuptools import setup
 
 setup(name='rl-agents',
       version='0.0.1',
-      install_requires=['numpy']
+      install_requires=['numpy', 'tensorflow', 'tensorlfow_probability']
 )
