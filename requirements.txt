@@ -1,0 +1,4 @@
+numpy
+gym
+tensorflow==2.0.0-alpha0
+tensorflow-probability
