@@ -13,14 +13,17 @@ class ContinuousSample(kl.Layer):
                                                     dtype='float32'),
                                trainable=True)
 
-    def call(self, logits):
+    def call(self, logits, training):
         # No need to add zeros lie logis, this shit should be broadcasted
+        if not trainning:
+            return logits, None, None
+        
         distribution = dists.Normal(loc=logits, scale=self.std)
         
         sample = distribution.sample()
         log_prob = distribution.log_prob(sample)
 
-        return sample, log_prob, distribution, self.std
+        return sample, log_prob, distribution, self.std, logits
         
 
 class Actor(tf.keras.Model):
