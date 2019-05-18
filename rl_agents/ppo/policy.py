@@ -13,11 +13,8 @@ class ContinuousSample(kl.Layer):
                                                     dtype='float32'),
                                trainable=True)
 
-    def call(self, logits, training):
+    def call(self, logits):
         # No need to add zeros lie logis, this shit should be broadcasted
-        if not trainning:
-            return logits, None, None
-        
         distribution = dists.Normal(loc=logits, scale=self.std)
         
         sample = distribution.sample()
@@ -36,7 +33,6 @@ class Actor(tf.keras.Model):
         
         # Logits
         self.logits = kl.Dense(act_space[0])
-
         # Sample
         self.sample = ContinuousSample(act_space[0])
         
@@ -46,9 +42,10 @@ class Actor(tf.keras.Model):
         x = self.layer_1(inputs)
         x = self.layer_2(x)
         logits = self.logits(x)
+        
         sample = self.sample(logits)
 
-        return sample
+        return logits, sample
 
     def action(self, obs):
         res = self.predict(obs)
