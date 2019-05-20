@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow_probability import distributions as dists
 import tensorflow.keras.layers as kl
@@ -10,7 +9,7 @@ class ContinuousSample(kl.Layer):
 
         s_init = tf.constant_initializer(np.exp(log_std))
         self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
-                                                    dtype='float32'),
+                                                    dtype='float64'),
                                trainable=True)
 
     def call(self, logits):
@@ -20,21 +19,21 @@ class ContinuousSample(kl.Layer):
         sample = distribution.sample()
         log_prob = distribution.log_prob(sample)
 
-        return sample, log_prob, distribution, self.std, logits
+        return sample, log_prob, distribution, logits
         
 
 class Actor(tf.keras.Model):
-    def __init__(self, obs_space, act_space, is_continuous, size=32, num_layers=2):
+    def __init__(self, obs_dim, act_dim, is_continuous, size=32, num_layers=2):
         super().__init__(name='Actor')
         self.continuous = is_continuous
 
-        self.layer_1 = kl.Dense(size, input_shape=obs_space, activation=tf.nn.relu)
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
         self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
         
         # Logits
-        self.logits = kl.Dense(act_space[0])
+        self.logits = kl.Dense(act_dim[0])
         # Sample
-        self.sample = ContinuousSample(act_space[0])
+        self.sample = ContinuousSample(act_dim[0])
         
         
     def call(self, inputs):
@@ -43,30 +42,21 @@ class Actor(tf.keras.Model):
         x = self.layer_2(x)
         logits = self.logits(x)
         
-        sample = self.sample(logits)
-
-        return logits, sample
+        return self.sample(logits)
 
     def action(self, obs):
         res = self.predict(obs)
-        print(res)
-
         return res
 
-# class Critic(tf.keras.Model):
-#     def __init__(self, obs_space):
-#         self.layers = [kl.Dense(size, activation=tf.nn.relu) for _ in range num_layers]
+class Critic(tf.keras.Model):
+    def __init__(self, obs_dim):
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
+        self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
         
-#         # This is the value
-#         self.output = tf.squeeze()
+        # Logits
+        self.value = kl.Dense(0)
         
-#     def call(self, inputs):
-#         hidden = tf.convert_to_tensor(inputs, dtype=tf.float32)
-#         for l in self.layers():
-#             hidden = l(obs)
-            
-#         return self.value(hidden)
-    
-# class PPO:
-#     def __init__(self):
-#         self.a = 21
+    def call(self, inputs):
+        x = self.layer_1(inputs)
+        x = self.layer_2(x)
+        return self.value(x)
