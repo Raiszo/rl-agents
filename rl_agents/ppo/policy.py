@@ -47,6 +47,7 @@ class Actor(tf.keras.Model):
     def action(self, obs):
         res = self.predict(obs)
         return res
+    
 
 class Critic(tf.keras.Model):
     def __init__(self, obs_dim):
