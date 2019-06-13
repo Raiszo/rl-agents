@@ -1,9 +1,10 @@
 import tensorflow as tf
+from ppo.policy import Actor, Critic
 
 class PPO_Agent(tf.keras.Model):
     def __init__(self,
-                 actor_model,
-                 critic_model
+                 actor,
+                 critic,
                  epsilon=0.2):
         self.actor = actor
         self.critic = critic
@@ -29,4 +30,7 @@ class PPO_Agent(tf.keras.Model):
 
         entropy_loss = tf.reduce_mean(dist.entropy())
 
+
+    def train(self, env):
+        losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
 
