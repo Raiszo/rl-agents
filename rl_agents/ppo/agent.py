@@ -36,13 +36,18 @@ class PPO_Agent(tf.keras.Model):
         return value_loss
 
 
-    def train_step(self, actions, log_probs, advantages, values, dist, target_values):
-        with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-            actor_loss = self.actor_loss(actions, advantages, dist, log_probs)
-            critic_loss = self.critic_loss(values, target_values)
+    def compile(self, learning_rate):
+        self.actor.compile(
+            optimizer=tf.keras.optimizer.Adam(learning_rate),
+            loss=self.actor_loss
+        )
 
-            
-            
+        self.critic.compile(
+            optimizer=tf.keras.optimizer.Adam(learning_rate),
+            loss=self.critic_loss
+        )
+
+
     def run_iteration(self, env,
                       num_epochs=10, batch_size=64, learning_rate=1e-4):
         
@@ -52,6 +57,8 @@ class PPO_Agent(tf.keras.Model):
             for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
+
+                actor_loss = self.actor.train_on_batch()
 
                 feed_dict = {
                     self.agent.state: obs[idx, :],
