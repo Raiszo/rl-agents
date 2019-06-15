@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def rollouts_generator(sess, agent, env, horizon):
+def rollouts_generator(agent, env, horizon):
     """
     Generator function
     This function will continue generating
@@ -30,7 +30,7 @@ def rollouts_generator(sess, agent, env, horizon):
         # prevac = ac
         # ac, vpred = pi.act(ob)
         
-        ac, vpred, log_prob = agent.act(ob, sess)
+        ac, _, _, _ = agent.act(ob, sess)
         # print(ac)
         """
         Need next_vpred if the batch ends in the middle of an episode, then we need to append

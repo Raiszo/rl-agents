@@ -1,7 +1,6 @@
 import tensorflow as tf
-from ppo.policy import Actor, Critic
 
-class PPO_Agent(tf.keras.Model):
+class PPO_Agent:
     def __init__(self,
                  actor,
                  critic,

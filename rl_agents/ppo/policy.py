@@ -1,11 +1,12 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow_probability import distributions as dists
 import tensorflow.keras.layers as kl
 
 
 class ContinuousSample(kl.Layer):
     def __init__(self, action_dim, log_std=-0.53):
-        super().__init__(name='ContinuousSample')
+        super(ContinuousSample, self).__init__(name='ContinuousSample')
 
         s_init = tf.constant_initializer(np.exp(log_std))
         self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
@@ -23,8 +24,9 @@ class ContinuousSample(kl.Layer):
         
 
 class Actor(tf.keras.Model):
-    def __init__(self, obs_dim, act_dim, is_continuous, size=32, num_layers=2):
-        super().__init__(name='Actor')
+    def __init__(self, obs_dim, act_dim, is_continuous,
+                 size=32, num_layers=2):
+        super(Actor, self).__init__(name='Actor')
         self.continuous = is_continuous
 
         self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
@@ -50,7 +52,9 @@ class Actor(tf.keras.Model):
     
 
 class Critic(tf.keras.Model):
-    def __init__(self, obs_dim):
+    def __init__(self, obs_dim,
+                 size=32, num_layers=2):
+        super(Critic, self).__init__(name='Critic')
         self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
         self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
         
