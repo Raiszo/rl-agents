@@ -10,6 +10,7 @@ class PPO_Agent(tf.keras.Model):
         self.critic = critic
         self.epsilon = epsilon
 
+
     def action_value(self, obs):
         action, log_prob, dist, logits = self.actor.predict(obs)
         value = self.critic.predict(obs)
@@ -36,37 +37,35 @@ class PPO_Agent(tf.keras.Model):
         return value_loss
 
 
-    def compile(self, learning_rate):
-        self.actor.compile(
-            optimizer=tf.keras.optimizer.Adam(learning_rate),
-            loss=self.actor_loss
-        )
+    @tf.function
+    def run_batch(self, optimizers, observations, target_values, advantages):
+        
+        with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
+            actions, log_prob, dists, logits = self.actor(observations)
+            values = self.critic(observations)
 
-        self.critic.compile(
-            optimizer=tf.keras.optimizer.Adam(learning_rate),
-            loss=self.critic_loss
-        )
+            act_loss = self.actor_loss(actions, advantages, dists, log_prob)
+            crt_loss = self.critic_loss(values, target_values)
+
+        gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
+        gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
+
+        optimizers[0].apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
+        optimizers[1].apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
     def run_iteration(self, env,
+                      obs, val, advs,
                       num_epochs=10, batch_size=64, learning_rate=1e-4):
-        
-        losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
+
+        actor_optimizer = tf.keras.optimizers.Adam(learning_rate)
+        critic_optimizer = tf.keras.optimizers.Adam(learning_rate)
+        optimizers = [ actor_optimizer, critic_optimizer ]
 
         for _ in range(num_epochs):
             for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                actor_loss = self.actor.train_on_batch()
-
-                feed_dict = {
-                    self.agent.state: obs[idx, :],
-                    self.ac_na: acs[idx, :],
-                    self.log_p: log_probs[idx, :],
-                    self.adv_n: advs[idx],
-                    self.t_val: val[idx],
-                }
-
-                stuff = sess.run(self.variables, feed_dict)
+                self.run_batch(optimizers, obs[idx, :], val[idx], advs[idx])
 
