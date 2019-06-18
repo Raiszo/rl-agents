@@ -11,20 +11,21 @@ class PPO_Agent:
 
 
     def action_value(self, obs):
-        action, log_prob, dist, logits = self.actor.predict(obs)
+        action, log_prob, logits = self.actor.predict(obs)
         value = self.critic.predict(obs)
 
-        return action , value, log_prob, dist
+        return action , value, log_prob, logits
 
 
-    def actor_loss(self, actions, advantages, dist, log_probs):
-        ratio = tf.exp(dist.log_prob(actions) - log_probs)
+    def actor_loss(self, actions, advantages, obs, old_log_probs):
+        _, new_log_probs, _, _, entropy = self.action_value(obs)
+        ratio = tf.exp(new_log_probs - old_log_probs)
         clipped_ratio = tf.clip_by_value(ratio, 1.0 - self.epsilon, 1.0 + epsilon)
         
         surrogate_min = tf.minimum(ratio*advantages, clipped_ratio*advantages)
         surrogate_loss = tf.reduce_mean(surrogate_min)
 
-        entropy_loss = tf.reduce_mean(dist.entropy())
+        entropy_loss = tf.reduce_mean(entropy)
         
         return surrogate_loss + entropy_loss
 

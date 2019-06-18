@@ -10,7 +10,7 @@ class ContinuousSample(kl.Layer):
 
         s_init = tf.constant_initializer(np.exp(log_std))
         self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
-                                                    dtype='float64'),
+                                                    dtype='float32'),
                                trainable=True)
 
     def call(self, logits):
@@ -19,9 +19,10 @@ class ContinuousSample(kl.Layer):
         
         sample = distribution.sample()
         log_prob = distribution.log_prob(sample)
+        entropy = distribution.entropy()
 
-        return sample, log_prob, distribution, logits
-        
+        return sample, log_prob, logits, entropy
+
 
 class Actor(tf.keras.Model):
     def __init__(self, obs_dim, act_dim, is_continuous,
@@ -43,13 +44,9 @@ class Actor(tf.keras.Model):
         x = self.layer_1(inputs)
         x = self.layer_2(x)
         logits = self.logits(x)
-        
+
         return self.sample(logits)
 
-    def action(self, obs):
-        res = self.predict(obs)
-        return res
-    
 
 class Critic(tf.keras.Model):
     def __init__(self, obs_dim,
