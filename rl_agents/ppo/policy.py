@@ -13,15 +13,17 @@ class ContinuousSample(kl.Layer):
                                                     dtype='float32'),
                                trainable=True)
 
-    def call(self, logits):
-        # No need to add zeros lie logis, this shit should be broadcasted
-        distribution = dists.Normal(loc=logits, scale=self.std)
-        
-        sample = distribution.sample()
-        log_prob = distribution.log_prob(sample)
-        entropy = distribution.entropy()
+    def call(self, logits, training):
+        if not training:
+            return logits, None, None, None
+        else:
+            distribution = dists.Normal(loc=logits, scale=self.std)
 
-        return sample, log_prob, logits, entropy
+            sample = distribution.sample()
+            log_prob = distribution.log_prob(sample)
+            entropy = distribution.entropy()
+
+            return sample, logits, log_prob, entropy
 
 
 class Actor(tf.keras.Model):
@@ -39,13 +41,16 @@ class Actor(tf.keras.Model):
         self.sample = ContinuousSample(act_dim[0])
         
         
-    def call(self, inputs):
+    def call(self, inputs, training=False):
         # x = tf.convert_to_tensor(inputs, dtype=tf.float32)
         x = self.layer_1(inputs)
         x = self.layer_2(x)
-        logits = self.logits(x)
+        x = self.logits(x)
 
-        return self.sample(logits)
+        if training:
+            x = self.sample(logits, training=training)
+        
+        return x
 
 
 class Critic(tf.keras.Model):

@@ -11,7 +11,7 @@ class PPO_Agent:
 
 
     def action_value(self, obs):
-        action, log_prob, logits = self.actor.predict(obs)
+        action, log_prob, logits = self.actor(obs)
         value = self.critic.predict(obs)
 
         return action , value, log_prob, logits
