@@ -10,7 +10,7 @@ class ContinuousSample(kl.Layer):
 
         s_init = tf.constant_initializer(np.exp(log_std))
         self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
-                                                    dtype='float32'),
+                                                    dtype='float64'),
                                trainable=True)
 
     def call(self, inputs, training):
@@ -42,7 +42,6 @@ class Actor(tf.keras.Model):
         
         
     def call(self, inputs, training=False):
-        # x = tf.convert_to_tensor(inputs, dtype=tf.float32)
         x = self.layer_1(inputs)
         x = self.layer_2(x)
         x = self.logits(x)
@@ -61,9 +60,11 @@ class Critic(tf.keras.Model):
         self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
         
         # Logits
-        self.value = kl.Dense(0)
+        self.value = kl.Dense(1)
         
     def call(self, inputs):
         x = self.layer_1(inputs)
         x = self.layer_2(x)
-        return self.value(x)
+        x = self.value(x)
+
+        return x

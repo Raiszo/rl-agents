@@ -29,9 +29,9 @@ def rollouts_generator(agent, env, horizon):
     while True:
         # prevac = ac
         # ac, vpred = pi.act(ob)
-        
-        ac, _, _, _ = agent.act(ob, sess)
-        # print(ac)
+        # print(ob)
+
+        ac, vpred, log_prob = agent.act_stochastic(ob)
         """
         Need next_vpred if the batch ends in the middle of an episode, then we need to append
         that value to vpreds to calculate the target Value using TD => V = r + gamma*V_{t+1}
@@ -73,19 +73,22 @@ def rollouts_generator(agent, env, horizon):
 
         t += 1
 
-def add_vtarg_adv(seg, lam, gamma):
-    T = len(seg["ob"])
-    new = np.append(seg["new"], 0)
-    seg["adv"] = gae_adv = np.empty(T, 'float32')
-    seg["vtarg"] = td_v = np.empty(T, 'float32')
+def get_adv_vtarg(roll, lam, gamma):
+    T = len(roll["ob"])
+    gae_adv = np.empty(T, 'float32')
+    target_val = np.empty(T, 'float32')
+
+    new = np.append(roll["new"], 0)
     
-    vpred = np.append(seg["vpred"], seg["next_vpred"])
+    vpred = np.append(roll["vpred"], roll["next_vpred"])
 
     last_gae = 0
     for t in reversed(range(T)):
         # check this, when is_terminal = 1-new[t], everything crushes like crazy
         is_terminal = 1-new[t+1]
-        delta = - vpred[t] + (is_terminal * gamma * vpred[t+1] + seg["rew"][t])
+        delta = - vpred[t] + (is_terminal * gamma * vpred[t+1] + roll["rew"][t])
         gae_adv[t] = last_gae = delta + gamma*lam*last_gae*is_terminal
 
-        td_v[t] = is_terminal * gamma * vpred[t+1] + seg["rew"][t]
+        target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
+
+    return gae_adv, target_val
