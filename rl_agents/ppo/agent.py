@@ -1,5 +1,6 @@
 import tensorflow as tf
-import math
+from math import ceil
+import numpy as np
 
 class PPO_Agent:
     def __init__(self,
@@ -50,29 +51,31 @@ class PPO_Agent:
 
 
     @tf.function
-    def train_step(self, optimizers, observations, target_values, advantages):
+    def train_step(self, observations, target_values, advantages, old_log_probs):
         
         with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-            actions, logits, log_prob, entropy = self.actor(observations, training=True)
+            actions, logits, log_probs, entropies = self.actor(observations, training=True)
             values = self.critic(observations) # recomputing just for clarity
 
-            act_loss = self.actor_loss(actions, advantages, dists, log_prob)
+            act_loss = self.actor_loss(log_prob, old_log_probs, entropies, advantages)
             crt_loss = self.critic_loss(values, target_values)
 
         gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
         gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
 
-        optimizers[0].apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
-        optimizers[1].apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
+        self.optimizers[0].apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
+        self.optimizers[1].apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
     def run_epoch(self, obs, t_val, adv,
                   epochs, batch_size=64):
+        size = len(obs)
+        train_indicies = np.arange(size)
 
         for _ in range(epochs):
             for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                self.train_step(optimizers, obs[idx, :], t_val[idx], adv[idx])
+                self.train_step(obs[idx, :], t_val[idx], adv[idx])
 
