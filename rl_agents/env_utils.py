@@ -20,11 +20,11 @@ def rollouts_generator(agent, env, horizon):
 
     obs = np.array([ob for _ in range(horizon)])
     acs = np.array([ac for _ in range(horizon)])
-    log_probs = np.array([ac for _ in range(horizon)])
-    vpreds = np.zeros(horizon, 'float32')
+    log_probs = np.array([ac.astype(np.float64) for _ in range(horizon)])
+    vpreds = np.zeros(horizon, 'float64')
 
     news = np.zeros(horizon, 'int32')
-    rews = np.zeros(horizon, 'float32')
+    rews = np.zeros(horizon, 'float64')
 
     while True:
         # prevac = ac
@@ -75,7 +75,7 @@ def rollouts_generator(agent, env, horizon):
 
 def get_adv_vtarg(roll, lam, gamma):
     T = len(roll["ob"])
-    gae_adv = np.empty(T, 'float32')
+    gae_adv = np.empty(T, 'float64')
     target_val = np.empty(T, 'float32')
 
     new = np.append(roll["new"], 0)

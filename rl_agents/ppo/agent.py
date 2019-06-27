@@ -36,7 +36,7 @@ class PPO_Agent:
         clipped_ratio = tf.clip_by_value(ratio,
                                          1.0 - self.epsilon,
                                          1.0 + self.epsilon)
-        surrogate_min = tf.minimum(ratio*advantages, clipped_ratio*advantages)
+        surrogate_min = tf.minimum(ratio*advs, clipped_ratio*advs)
         surrogate_loss = tf.reduce_mean(surrogate_min)
         entropy_loss = tf.reduce_mean(entropy)
         
@@ -44,7 +44,7 @@ class PPO_Agent:
 
 
     def critic_loss(self, values, target_values):
-        value_loss = tf.losses.mean_squared_error(labels=target_values, predictions=values)
+        value_loss = tf.keras.losses.mean_squared_error(y_true=target_values, y_pred=values)
         value_loss = tf.reduce_mean(value_loss)
 
         return value_loss
@@ -57,7 +57,7 @@ class PPO_Agent:
             actions, logits, log_probs, entropies = self.actor(observations, training=True)
             values = self.critic(observations) # recomputing just for clarity
 
-            act_loss = self.actor_loss(log_prob, old_log_probs, entropies, advantages)
+            act_loss = self.actor_loss(log_probs, old_log_probs, entropies, advantages)
             crt_loss = self.critic_loss(values, target_values)
 
         gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
@@ -67,7 +67,7 @@ class PPO_Agent:
         self.optimizers[1].apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
-    def run_epoch(self, obs, t_val, adv,
+    def run_epoch(self, obs, old_log_probs, t_val, adv,
                   epochs, batch_size=64):
         size = len(obs)
         train_indicies = np.arange(size)
@@ -77,5 +77,5 @@ class PPO_Agent:
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                self.train_step(obs[idx, :], t_val[idx], adv[idx])
+                self.train_step(obs[idx, :], t_val[idx], adv[idx], old_log_probs[idx])
 
