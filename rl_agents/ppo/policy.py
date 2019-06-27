@@ -17,13 +17,13 @@ class ContinuousSample(kl.Layer):
         if not training:
             return inputs, None, None, None
         else:
+            tf.print(inputs.shape)
             distribution = dists.Normal(loc=inputs, scale=self.std)
 
             sample = distribution.sample()
             log_prob = distribution.log_prob(sample)
-            entropy = distribution.entropy()
 
-            return sample, inputs, log_prob, entropy
+            return sample, inputs, log_prob, distribution
 
 
 class Actor(tf.keras.Model):
@@ -42,12 +42,16 @@ class Actor(tf.keras.Model):
         
         
     def call(self, inputs, training=False):
+        tf.print(inputs.shape)
         x = self.layer_1(inputs)
+        tf.print(x.shape)
         x = self.layer_2(x)
+        tf.print(x.shape)
         x = self.logits(x)
+        tf.print(x.shape)
 
-        if training:
-            x = self.sample(x, training=training)
+        # if training:
+        x = self.sample(x, training=training)
         
         return x
 
