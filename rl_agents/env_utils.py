@@ -8,8 +8,8 @@ def rollouts_generator(agent, env, horizon):
     samples as long as __next__() method is called
     """
     t = 0
-    ac = env.action_space.sample()
-    ob = env.reset()
+    ac = env.action_space.sample().astype(np.float64)
+    ob = env.reset().astype(np.float64)
 
     cur_ep_ret = 0 # return in current episode
     cur_ep_len = 0 # len of current episode
@@ -76,7 +76,7 @@ def rollouts_generator(agent, env, horizon):
 def get_adv_vtarg(roll, lam, gamma):
     T = len(roll["ob"])
     gae_adv = np.empty(T, 'float64')
-    target_val = np.empty(T, 'float32')
+    target_val = np.empty(T, 'float64')
 
     new = np.append(roll["new"], 0)
     

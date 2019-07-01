@@ -23,8 +23,12 @@ class PPO_Agent:
 
         return action[0], value[0], log_prob[0]
 
+
     def get_distributions(self, obs):
-        _, _, _, dist = self.actor(obs[None], training=True)
+        """
+        Do not add a dim to obs, this will always have a batch
+        """
+        _, _, _, dist = self.actor(obs, training=True)
 
         return dist     
 
@@ -37,7 +41,7 @@ class PPO_Agent:
 
     def actor_loss(self, new_log_probs, old_log_probs, entropy, advs):
         ratio = tf.exp(new_log_probs - old_log_probs)
-        tf.print(tf.reduce_mean(ratio))
+        tf.print('ratio:', tf.reduce_mean(ratio))
         clipped_ratio = tf.clip_by_value(ratio,
                                          1.0 - self.epsilon,
                                          1.0 + self.epsilon)
@@ -55,19 +59,22 @@ class PPO_Agent:
         return value_loss
 
 
-    # @tf.function
+    @tf.function
     def train_step(self, observations, actions, log_probs, target_values, advantages):
 
-        print(observations.shape)
-        # print(observations, actions, target_values, advantages, log_probs)
+        # tf.print(observations.dtype)
+        # tf.print(actions.dtype)
+        # tf.print(log_probs.dtype)
+        # tf.print(target_values.dtype)
+        # tf.print(advantages.dtype)
         with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
             dist = self.get_distributions(observations)
             values = self.critic(observations) # recomputing just for clarity
 
             new_log_probs = dist.log_prob(actions)
             entropies = dist.entropy()
-            print(new_log_probs)
-            print(entropies)
+            # print(new_log_probs)
+            # print(entropies)
             act_loss = self.actor_loss(new_log_probs, log_probs, entropies, advantages)
             crt_loss = self.critic_loss(values, target_values)
 
@@ -88,7 +95,6 @@ class PPO_Agent:
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                print(obs.shape)
                 self.train_step(obs[idx, :], acs[idx], log_probs[idx], t_val[idx], adv[idx])
-                break
+                # break
 
