@@ -14,15 +14,15 @@ class ContinuousSample(kl.Layer):
                                trainable=True)
 
     def call(self, inputs, training):
-        if not training:
-            return inputs, None, None, None
-        else:
+        if training:
             distribution = dists.Normal(loc=inputs, scale=self.std)
 
             sample = distribution.sample()
             log_prob = distribution.log_prob(sample)
 
             return sample, inputs, log_prob, distribution
+        else:
+            return inputs, None, None, None
 
 
 class Actor(tf.keras.Model):

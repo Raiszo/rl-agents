@@ -52,40 +52,35 @@ class PPO_Agent:
         return surrogate_loss + entropy_loss
 
 
-    def critic_loss(self, values, target_values):
-        value_loss = tf.keras.losses.mean_squared_error(y_true=target_values, y_pred=values)
+    def critic_loss(self, t_value_n, p_value_n):
+        value_loss = tf.keras.losses.mean_squared_error(y_true=t_value_n, y_pred=p_value_n)
         value_loss = tf.reduce_mean(value_loss)
 
         return value_loss
 
 
     @tf.function
-    def train_step(self, observations, actions, log_probs, target_values, advantages):
+    def train_step(self, obs_no, ac_na, log_prob_n, adv_n,
+                   true_value_n, pred_value_n):
 
-        # tf.print(observations.dtype)
-        # tf.print(actions.dtype)
-        # tf.print(log_probs.dtype)
-        # tf.print(target_values.dtype)
-        # tf.print(advantages.dtype)
         with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-            dist = self.get_distributions(observations)
-            values = self.critic(observations) # recomputing just for clarity
+            dist = self.get_distributions(obs_no)
 
-            new_log_probs = dist.log_prob(actions)
+            new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
             # print(new_log_probs)
             # print(entropies)
-            act_loss = self.actor_loss(new_log_probs, log_probs, entropies, advantages)
-            crt_loss = self.critic_loss(values, target_values)
+            act_loss = self.actor_loss(new_log_prob_n, log_prob_n, entropies, advantages)
+            crt_loss = self.critic_loss(true_value_n, pred_value_n)
 
         gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
         gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
 
-        self.optimizers[0].apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
-        self.optimizers[1].apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
+        self.actor_opt.apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
+        self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
-    def run_epoch(self, obs, acs, log_probs, t_val, adv,
+    def run_epoch(self, obs, ac, log_prob, t_val, p_val, adv,
                   epochs, batch_size=64):
         size = len(obs)
         train_indicies = np.arange(size)
@@ -95,6 +90,7 @@ class PPO_Agent:
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                self.train_step(obs[idx, :], acs[idx], log_probs[idx], t_val[idx], adv[idx])
+                self.train_step(obs[idx, :], acs[idx, :], log_prob_n[idx], adv[idx]
+                                t_val[idx], p_val)
                 # break
 
