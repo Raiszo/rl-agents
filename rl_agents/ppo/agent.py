@@ -41,7 +41,7 @@ class PPO_Agent:
 
     def actor_loss(self, new_log_probs, old_log_probs, entropy, advs):
         ratio = tf.exp(new_log_probs - old_log_probs)
-        tf.print('ratio:', tf.reduce_mean(ratio))
+        # tf.print('ratio:', tf.reduce_mean(ratio))
         clipped_ratio = tf.clip_by_value(ratio,
                                          1.0 - self.epsilon,
                                          1.0 + self.epsilon)
@@ -61,16 +61,18 @@ class PPO_Agent:
 
     @tf.function
     def train_step(self, obs_no, ac_na, log_prob_n, adv_n,
-                   true_value_n, pred_value_n):
+                   true_value_n):
 
         with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
             dist = self.get_distributions(obs_no)
+            # Need to recompute this to record the gradient in the gradient tape
+            pred_value_n = self.critic(obs_no)
 
             new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
             # print(new_log_probs)
             # print(entropies)
-            act_loss = self.actor_loss(new_log_prob_n, log_prob_n, entropies, advantages)
+            act_loss = self.actor_loss(new_log_prob_n, log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
 
         gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
@@ -80,7 +82,7 @@ class PPO_Agent:
         self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
-    def run_epoch(self, obs, ac, log_prob, t_val, p_val, adv,
+    def run_epoch(self, obs, ac, log_prob, t_val, adv,
                   epochs, batch_size=64):
         size = len(obs)
         train_indicies = np.arange(size)
@@ -90,7 +92,6 @@ class PPO_Agent:
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
-                self.train_step(obs[idx, :], acs[idx, :], log_prob_n[idx], adv[idx]
-                                t_val[idx], p_val)
+                self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
                 # break
 
