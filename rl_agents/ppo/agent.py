@@ -14,9 +14,10 @@ class PPO_Agent:
         self.alfa = learning_rate
         self.actor_opt = tf.keras.optimizers.Adam(learning_rate)
         self.critic_opt = tf.keras.optimizers.Adam(learning_rate)
-        self.optimizers = [ self.actor_opt, self.critic_opt ]
 
+        self.reward_metric = tf.keras.metrics.Mean('reward', dtype=tf.float64)
 
+    @tf.function
     def act_stochastic(self, obs):
         action, _, log_prob, _ = self.actor(obs[None], training=True)
         value = self.critic(obs[None])
@@ -83,15 +84,18 @@ class PPO_Agent:
 
 
     def run_epoch(self, obs, ac, log_prob, t_val, adv,
-                  epochs, batch_size=64):
+                  epochs, summary_writer, rewards, ite, batch_size=64):
         size = len(obs)
         train_indicies = np.arange(size)
 
-        for _ in range(epochs):
+        for epoch in range(epochs):
             for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
                 self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
-                # break
 
+                self.reward_metric(np.array(rewards).mean())
+                # break
+            tf.summary.scalar('reward', self.reward_metric.result(), step=epochs*ite+epoch)
+            self.reward_metric.reset_states()
