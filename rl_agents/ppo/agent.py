@@ -15,7 +15,7 @@ class PPO_Agent:
         self.actor_opt = tf.keras.optimizers.Adam(learning_rate)
         self.critic_opt = tf.keras.optimizers.Adam(learning_rate)
 
-        self.reward_metric = tf.keras.metrics.Mean('reward', dtype=tf.float64)
+        # self.reward_metric = tf.keras.metrics.Mean('reward', dtype=tf.float64)
 
     @tf.function
     def act_stochastic(self, obs):
@@ -23,15 +23,6 @@ class PPO_Agent:
         value = self.critic(obs[None])
 
         return action[0], value[0], log_prob[0]
-
-
-    def get_distributions(self, obs):
-        """
-        Do not add a dim to obs, this will always have a batch
-        """
-        _, _, _, dist = self.actor(obs, training=True)
-
-        return dist     
 
 
     def act_deterministic(self, obs):
@@ -50,30 +41,31 @@ class PPO_Agent:
         surrogate_loss = tf.reduce_mean(surrogate_min)
         entropy_loss = tf.reduce_mean(entropy)
         
-        return surrogate_loss + entropy_loss
+        return - surrogate_loss - 0.01*entropy_loss
 
 
     def critic_loss(self, t_value_n, p_value_n):
         value_loss = tf.keras.losses.mean_squared_error(y_true=t_value_n, y_pred=p_value_n)
         value_loss = tf.reduce_mean(value_loss)
 
-        return value_loss
+        return 0.5 * value_loss
 
 
     @tf.function
-    def train_step(self, obs_no, ac_na, log_prob_n, adv_n,
+    def train_step(self, obs_no, ac_na, old_log_prob_n, adv_n,
                    true_value_n):
 
         with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-            dist = self.get_distributions(obs_no)
+            _, _, _, dist = self.actor(obs_no, training=True)
+            new_log_prob_n = dist.log_prob(ac_na)
+            entropies = dist.entropy()
+
             # Need to recompute this to record the gradient in the gradient tape
             pred_value_n = self.critic(obs_no)
 
-            new_log_prob_n = dist.log_prob(ac_na)
-            entropies = dist.entropy()
             # print(new_log_probs)
             # print(entropies)
-            act_loss = self.actor_loss(new_log_prob_n, log_prob_n, entropies, adv_n)
+            act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
 
         gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
@@ -83,8 +75,8 @@ class PPO_Agent:
         self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
 
-    def run_epoch(self, obs, ac, log_prob, t_val, adv,
-                  epochs, summary_writer, rewards, ite, batch_size=64):
+    def run_ite(self, obs, ac, log_prob, t_val, adv,
+                epochs, batch_size=64):
         size = len(obs)
         train_indicies = np.arange(size)
 
@@ -94,8 +86,3 @@ class PPO_Agent:
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
                 self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
-
-                self.reward_metric(np.array(rewards).mean())
-                # break
-            tf.summary.scalar('reward', self.reward_metric.result(), step=epochs*ite+epoch)
-            self.reward_metric.reset_states()
