@@ -26,7 +26,7 @@ class PPO_Agent:
 
 
     def act_deterministic(self, obs):
-        action, _, _, _ = self.actor.predict(obs)
+        action, _, _, _ = self.actor(obs[None], training=False)
 
         return action
         
