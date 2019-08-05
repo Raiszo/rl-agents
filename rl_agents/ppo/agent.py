@@ -12,8 +12,9 @@ class PPO_Agent:
         self.epsilon = epsilon
         
         self.alfa = learning_rate
-        self.actor_opt = tf.keras.optimizers.Adam(learning_rate)
-        self.critic_opt = tf.keras.optimizers.Adam(learning_rate)
+        # self.actor_opt = tf.keras.optimizers.Adam(learning_rate)
+        # self.critic_opt = tf.keras.optimizers.Adam(learning_rate)
+        self.opt = tf.keras.optimizers.Adam(learning_rate)
 
         # self.reward_metric = tf.keras.metrics.Mean('reward', dtype=tf.float64)
 
@@ -55,7 +56,26 @@ class PPO_Agent:
     def train_step(self, obs_no, ac_na, old_log_prob_n, adv_n,
                    true_value_n):
 
-        with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
+        # with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
+        #     _, _, _, dist = self.actor(obs_no, training=True)
+        #     new_log_prob_n = dist.log_prob(ac_na)
+        #     entropies = dist.entropy()
+
+        #     # Need to recompute this to record the gradient in the gradient tape
+        #     pred_value_n = self.critic(obs_no)
+
+        #     # print(new_log_probs)
+        #     # print(entropies)
+        #     act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
+        #     crt_loss = self.critic_loss(true_value_n, pred_value_n)
+
+        # gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
+        # gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
+
+        # self.actor_opt.apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
+        # self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
+
+        with tf.GradientTape() as tape:
             _, _, _, dist = self.actor(obs_no, training=True)
             new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
@@ -68,11 +88,11 @@ class PPO_Agent:
             act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
 
-        gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
-        gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
+            loss = act_loss + crt_loss
 
-        self.actor_opt.apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
-        self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
+        variables = self.actor.trainable_variables + self.critic.trainable_variables
+        gradients = tape.gradient(loss, variables)
+        self.opt.apply_gradients(zip(gradients, variables))
 
 
     def run_ite(self, obs, ac, log_prob, t_val, adv,
