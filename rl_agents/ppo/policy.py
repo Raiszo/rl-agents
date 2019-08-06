@@ -11,6 +11,7 @@ class ContinuousSample(kl.Layer):
         s_init = tf.constant_initializer(np.exp(log_std))
         self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
                                                     dtype='float64'),
+                               name='std',
                                trainable=True)
 
     def call(self, inputs, training):

@@ -39,6 +39,7 @@ def rollouts_generator(agent, env, horizon):
         but the Value target for the last step(T-1) is just the reward => V = r
         """
         if t > 0 and t % horizon == 0:
+            print(agent.actor.trainable_variables[6])
             yield { "ob": obs, "ac": acs, "rew": rews, "new": news,
                     "vpred": vpreds, "next_vpred": vpred*(1-new),
                     "ep_rets" : ep_rets, "ep_lens" : ep_lens,

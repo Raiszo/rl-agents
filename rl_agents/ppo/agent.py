@@ -33,8 +33,10 @@ class PPO_Agent:
         
 
     def actor_loss(self, new_log_probs, old_log_probs, entropy, advs):
-        ratio = tf.exp(new_log_probs - old_log_probs)
-        # tf.print('ratio:', tf.reduce_mean(ratio))
+        diff = new_log_probs - old_log_probs
+        ratio = tf.exp(diff)
+        # tf.print('ratio shape', ratio.shape)
+        tf.print('diff:', tf.reduce_mean(diff))
         clipped_ratio = tf.clip_by_value(ratio,
                                          1.0 - self.epsilon,
                                          1.0 + self.epsilon)
@@ -83,7 +85,8 @@ class PPO_Agent:
             # Need to recompute this to record the gradient in the gradient tape
             pred_value_n = self.critic(obs_no)
 
-            # print(new_log_probs)
+            print('new', tf.reduce_mean(new_log_prob_n))
+            print('old', tf.reduce_mean(old_log_prob_n))
             # print(entropies)
             act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
@@ -101,8 +104,10 @@ class PPO_Agent:
         train_indicies = np.arange(size)
 
         for epoch in range(epochs):
-            for i in range(int(ceil(size/batch_size))):
+            for i in range(3):
+            # for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
 
+                print(epoch, i)
                 self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
