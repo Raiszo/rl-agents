@@ -20,6 +20,7 @@ def rollouts_generator(agent, env, horizon):
 
     obs = np.array([ob for _ in range(horizon)])
     acs = np.array([ac for _ in range(horizon)])
+    inps = np.array([ac for _ in range(horizon)])
     log_probs = np.array([ac.astype(np.float64) for _ in range(horizon)])
     vpreds = np.zeros(horizon, 'float64')
 
@@ -31,15 +32,27 @@ def rollouts_generator(agent, env, horizon):
         # ac, vpred = pi.act(ob)
         # print(ob)
 
-        ac, vpred, log_prob = agent.act_stochastic(ob)
+        ac, vpred, log_prob, inp = agent.act_stochastic(ob)
         """
         Need next_vpred if the batch ends in the middle of an episode, then we need to append
         that value to vpreds to calculate the target Value using TD => V = r + gamma*V_{t+1}
         Else (finished episode) then append justa 0, does not mean that the value is 0
         but the Value target for the last step(T-1) is just the reward => V = r
         """
+        # if t % 500 == 0:
+        #     print(agent.actor.trainable_variables[6])
         if t > 0 and t % horizon == 0:
-            print(agent.actor.trainable_variables[6])
+            # print(agent.actor.trainable_variables[6])
+            print(i, t)
+            # print()
+            # When comparing this with the ones that are calculated in the train step
+            # The first one is different, the others are the same
+            # Without the first one everything works well
+            print('inputs', inps[0:5])
+            print('observations', obs[0:5])
+            print('actions', acs[0:5])
+            print('log_probs', log_probs[0:5])
+            print('lel')
             yield { "ob": obs, "ac": acs, "rew": rews, "new": news,
                     "vpred": vpreds, "next_vpred": vpred*(1-new),
                     "ep_rets" : ep_rets, "ep_lens" : ep_lens,
@@ -51,6 +64,7 @@ def rollouts_generator(agent, env, horizon):
 
         obs[i] = ob
         acs[i] = ac
+        inps[i] = inp
         vpreds[i] = vpred
         log_probs[i] = log_prob
         news[i] = new

@@ -16,7 +16,8 @@ class ContinuousSample(kl.Layer):
 
     def call(self, inputs, training):
         if training:
-            distribution = dists.Normal(loc=inputs, scale=self.std)
+            std = std = tf.zeros_like(inputs) + self.std
+            distribution = dists.Normal(loc=inputs, scale=std)
 
             sample = distribution.sample()
             log_prob = distribution.log_prob(sample)
@@ -32,8 +33,8 @@ class Actor(tf.keras.Model):
         super(Actor, self).__init__(name='Actor')
         self.continuous = is_continuous
 
-        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
-        self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
         
         # Logits
         self.logits = kl.Dense(act_dim[0])
@@ -56,8 +57,8 @@ class Critic(tf.keras.Model):
     def __init__(self, obs_dim,
                  size=32, num_layers=2):
         super(Critic, self).__init__(name='Critic')
-        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.nn.relu)
-        self.layer_2 = kl.Dense(size, activation=tf.nn.relu)
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
         
         # Logits
         self.value = kl.Dense(1)

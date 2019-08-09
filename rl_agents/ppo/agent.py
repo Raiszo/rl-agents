@@ -20,10 +20,10 @@ class PPO_Agent:
 
     @tf.function
     def act_stochastic(self, obs):
-        action, _, log_prob, _ = self.actor(obs[None], training=True)
+        action, inp, log_prob, _ = self.actor(obs[None], training=True)
         value = self.critic(obs[None])
 
-        return action[0], value[0], log_prob[0]
+        return action[0], value[0], log_prob[0], inp[0]
 
 
     def act_deterministic(self, obs):
@@ -77,16 +77,21 @@ class PPO_Agent:
         # self.actor_opt.apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
         # self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
 
+        tf.print('std', self.actor.sample.std)
         with tf.GradientTape() as tape:
-            _, _, _, dist = self.actor(obs_no, training=True)
+            _, inps, _, dist = self.actor(obs_no, training=True)
+            tf.print('inps', inps[0:5])
+            tf.print('obss', obs_no[0:5])
+            tf.print('acs', ac_na[0:5])
+            tf.print('lp', old_log_prob_n[0:5])
             new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
 
             # Need to recompute this to record the gradient in the gradient tape
             pred_value_n = self.critic(obs_no)
 
-            print('new', tf.reduce_mean(new_log_prob_n))
-            print('old', tf.reduce_mean(old_log_prob_n))
+            # tf.print('new', new_log_prob_n[0:5])
+            # tf.print('old', old_log_prob_n[0:5])
             # print(entropies)
             act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
