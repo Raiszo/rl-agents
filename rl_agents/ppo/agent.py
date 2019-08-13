@@ -20,10 +20,10 @@ class PPO_Agent:
 
     @tf.function
     def act_stochastic(self, obs):
-        action, inp, log_prob, _ = self.actor(obs[None], training=True)
+        loc, _, sample, log_prob = self.actor(obs[None], training=True)
         value = self.critic(obs[None])
 
-        return action[0], value[0], log_prob[0], inp[0]
+        return loc[0], sample[0], log_prob[0], value[0]
 
 
     def act_deterministic(self, obs):
@@ -53,7 +53,6 @@ class PPO_Agent:
 
         return 0.5 * value_loss
 
-
     @tf.function
     def train_step(self, obs_no, ac_na, old_log_prob_n, adv_n,
                    true_value_n):
@@ -79,9 +78,9 @@ class PPO_Agent:
 
         tf.print('std', self.actor.sample.std)
         with tf.GradientTape() as tape:
-            _, inps, _, dist = self.actor(obs_no, training=True)
-            tf.print('inps', inps[0:5])
+            locs, dist, _, _ = self.actor(obs_no, training=True)
             tf.print('obss', obs_no[0:5])
+            tf.print('locs', locs[0:5])
             tf.print('acs', ac_na[0:5])
             tf.print('lp', old_log_prob_n[0:5])
             new_log_prob_n = dist.log_prob(ac_na)
@@ -103,9 +102,25 @@ class PPO_Agent:
         self.opt.apply_gradients(zip(gradients, variables))
 
 
-    def run_ite(self, obs, ac, log_prob, t_val, adv,
+    @tf.function
+    def my_step(self, obs_no, ac_na, old_log_prob_n):
+        locs, dist, _, _ = self.actor(obs_no, training=True)
+
+        tf.print('obss', obs_no[0:5])
+        tf.print('locs', locs[0:5])
+        tf.print('acs', ac_na[0:5])
+        tf.print('lp', old_log_prob_n[0:5])
+        new_log_prob_n = dist.log_prob(ac_na)
+        entropies = dist.entropy()
+        
+        diff = new_log_prob_n - old_log_prob_n
+        ratio = tf.exp(diff)
+        # tf.print('ratio shape', ratio.shape)
+        tf.print('diff:', tf.reduce_mean(diff))
+
+    def run_ite(self, obs_no, ac_na, log_prob_na, locs_na, t_val_n, adv_n,
                 epochs, batch_size=64):
-        size = len(obs)
+        size = len(obs_no)
         train_indicies = np.arange(size)
 
         for epoch in range(epochs):
@@ -113,6 +128,24 @@ class PPO_Agent:
             # for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
+                print(idx)
+
+                obs_no_b = obs_no[idx, :]
+                locs_na_b = locs_na[idx, :]
+                ac_na_b = ac_na[idx, :]
+                log_prob_na_b = log_prob_na[idx, :]
 
                 print(epoch, i)
-                self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
+                print('------ batch ------')
+                print('observations', obs_no_b[0:5])
+                print('locs', locs_na_b[0:5])
+                print('actions', ac_na_b[0:5])
+                print('log_probs', log_prob_na_b[0:5])
+                print(obs_no_b.shape)
+                print(ac_na_b.shape)
+                print(log_prob_na_b.shape)
+                print('------ batch ------')
+
+                # self.my_step(obs_no_b, ac_na_b, log_prob_na_b)
+                self.train_step(obs_no_b, ac_na_b, log_prob_na_b, adv_n[idx], t_val_n[idx])
+                # self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])

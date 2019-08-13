@@ -16,13 +16,13 @@ class ContinuousSample(kl.Layer):
 
     def call(self, inputs, training):
         if training:
-            std = std = tf.zeros_like(inputs) + self.std
+            std = tf.zeros_like(inputs) + self.std
             distribution = dists.Normal(loc=inputs, scale=std)
 
             sample = distribution.sample()
             log_prob = distribution.log_prob(sample)
 
-            return sample, inputs, log_prob, distribution
+            return inputs, distribution, sample, log_prob
         else:
             return inputs, None, None, None
 
