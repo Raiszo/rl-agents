@@ -28,23 +28,9 @@ def rollouts_generator(agent, env, horizon):
     rews = np.zeros(horizon, 'float64')
 
     while True:
-        # prevac = ac
-        # ac, vpred = pi.act(ob)
-        # print(ob)
-
-        loc, ac, log_prob, vpred = agent.act_stochastic(ob)
-        """
-        Need next_vpred if the batch ends in the middle of an episode, then we need to append
-        that value to vpreds to calculate the target Value using TD => V = r + gamma*V_{t+1}
-        Else (finished episode) then append justa 0, does not mean that the value is 0
-        but the Value target for the last step(T-1) is just the reward => V = r
-        """
         # if t % 500 == 0:
         #     print(agent.actor.trainable_variables[6])
         if t > 0 and t % horizon == 0:
-            # print(agent.actor.trainable_variables[6])
-            print(i, t)
-            # print()
             # When comparing this with the ones that are calculated in the train step
             # The first one is different, the others are the same
             # Without the first one everything works well
@@ -55,6 +41,13 @@ def rollouts_generator(agent, env, horizon):
             ep_rets = []
             ep_lens = []
         
+        loc, ac, log_prob, vpred = agent.act_stochastic(ob)
+        """
+        Need next_vpred if the batch ends in the middle of an episode, then we need to append
+        that value to vpreds to calculate the target Value using TD => V = r + gamma*V_{t+1}
+        Else (finished episode) then append justa 0, does not mean that the value is 0
+        but the Value target for the last step(T-1) is just the reward => V = r
+        """
         i = t % horizon
 
         obs[i] = ob
