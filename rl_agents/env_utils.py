@@ -78,10 +78,10 @@ def rollouts_generator(agent, env, horizon):
 
 def get_adv_vtarg(roll, lam, gamma):
     T = len(roll["ob"])
+    new = np.append(roll["new"], 0)
+
     gae_adv = np.empty(T, 'float64')
     target_val = np.empty(T, 'float64')
-
-    new = np.append(roll["new"], 0)
     
     vpred = np.append(roll["vpred"], roll["next_vpred"])
 

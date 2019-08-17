@@ -99,6 +99,8 @@ class PPO_Agent:
 
         variables = self.actor.trainable_variables + self.critic.trainable_variables
         gradients = tape.gradient(loss, variables)
+        # gradient_clip = 40
+        # grads, _ = tf.clip_by_global_norm(gradients, gradient_clip)
         self.opt.apply_gradients(zip(gradients, variables))
 
 
