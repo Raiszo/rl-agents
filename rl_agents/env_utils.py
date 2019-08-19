@@ -30,10 +30,13 @@ def rollouts_generator(agent, env, horizon):
     while True:
         # if t % 500 == 0:
         #     print(agent.actor.trainable_variables[6])
+        
         if t > 0 and t % horizon == 0:
             # When comparing this with the ones that are calculated in the train step
             # The first one is different, the others are the same
             # Without the first one everything works well
+            _, _, _, vpred = agent.act_stochastic(ob)
+
             yield { "ob": obs, "ac": acs, "rew": rews, "new": news,
                     "vpred": vpreds, "next_vpred": vpred*(1-new),
                     "ep_rets" : ep_rets, "ep_lens" : ep_lens,
@@ -41,6 +44,11 @@ def rollouts_generator(agent, env, horizon):
             ep_rets = []
             ep_lens = []
         
+        i = t % horizon
+
+        news[i] = new
+        obs[i] = ob
+
         loc, ac, log_prob, vpred = agent.act_stochastic(ob)
         """
         Need next_vpred if the batch ends in the middle of an episode, then we need to append
@@ -48,15 +56,13 @@ def rollouts_generator(agent, env, horizon):
         Else (finished episode) then append justa 0, does not mean that the value is 0
         but the Value target for the last step(T-1) is just the reward => V = r
         """
-        i = t % horizon
 
-        obs[i] = ob
-        acs[i] = ac
         locs[i] = loc
-        vpreds[i] = vpred
+        acs[i] = ac
         log_probs[i] = log_prob
-        news[i] = new
+        vpreds[i] = vpred
 
+        # the ob and new here will be used in the next iteration of the while loop
         ob, rew, new, _ = env.step(ac)
         # print(rew)
         rew = np.sum(rew)
@@ -76,22 +82,26 @@ def rollouts_generator(agent, env, horizon):
 
         t += 1
 
+# def GAE(rewards, value, news):
+    
 def get_adv_vtarg(roll, lam, gamma):
     T = len(roll["ob"])
     new = np.append(roll["new"], 0)
 
     gae_adv = np.empty(T, 'float64')
-    target_val = np.empty(T, 'float64')
+    # target_val = np.empty(T, 'float64')
     
     vpred = np.append(roll["vpred"], roll["next_vpred"])
 
     last_gae = 0
     for t in reversed(range(T)):
         # check this, when is_terminal = 1-new[t], everything crushes like crazy
+        # If the next step is corresponds to a new iteration, then this is the end
         is_terminal = 1-new[t+1]
         delta = - vpred[t] + (is_terminal * gamma * vpred[t+1] + roll["rew"][t])
         gae_adv[t] = last_gae = delta + gamma*lam*last_gae*is_terminal
 
-        target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
+        # target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
+    target_val = gae_adv + roll["vpred"]
 
     return gae_adv, target_val
