@@ -20,7 +20,6 @@ def rollouts_generator(agent, env, horizon):
 
     obs = np.array([ob for _ in range(horizon)])
     acs = np.array([ac for _ in range(horizon)])
-    locs = np.array([ac for _ in range(horizon)])
     log_probs = np.array([ac for _ in range(horizon)])
     vpreds = np.zeros(horizon, 'float64')
 
@@ -35,12 +34,12 @@ def rollouts_generator(agent, env, horizon):
             # When comparing this with the ones that are calculated in the train step
             # The first one is different, the others are the same
             # Without the first one everything works well
-            _, _, _, vpred = agent.act_stochastic(ob)
+            _, _, vpred = agent.act_stochastic(ob)
 
             yield { "ob": obs, "ac": acs, "rew": rews, "new": news,
                     "vpred": vpreds, "next_vpred": vpred*(1-new),
                     "ep_rets" : ep_rets, "ep_lens" : ep_lens,
-                    "log_probs": log_probs, "locs": locs }
+                    "log_probs": log_probs }
             ep_rets = []
             ep_lens = []
         
@@ -49,7 +48,7 @@ def rollouts_generator(agent, env, horizon):
         news[i] = new
         obs[i] = ob
 
-        loc, ac, log_prob, vpred = agent.act_stochastic(ob)
+        ac, log_prob, vpred = agent.act_stochastic(ob)
         """
         Need next_vpred if the batch ends in the middle of an episode, then we need to append
         that value to vpreds to calculate the target Value using TD => V = r + gamma*V_{t+1}
@@ -57,7 +56,6 @@ def rollouts_generator(agent, env, horizon):
         but the Value target for the last step(T-1) is just the reward => V = r
         """
 
-        locs[i] = loc
         acs[i] = ac
         log_probs[i] = log_prob
         vpreds[i] = vpred

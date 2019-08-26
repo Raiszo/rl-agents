@@ -1,0 +1,66 @@
+import tensorflow as tf
+import numpy as np
+from tensorflow_probability import distributions
+import tensorflow.keras.layers as kl
+
+
+class ContinuousSample(kl.Layer):
+    def __init__(self, action_dim, log_std=-0.53):
+        super(ContinuousSample, self).__init__(name='ContinuousSample')
+
+        s_init = tf.constant_initializer(np.exp(log_std))
+        self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
+                                                    dtype='float64'),
+                               name='std',
+                               trainable=True)
+
+    def call(self, inputs):
+        # If training return dist, else not
+        # So better to always return everything
+        std = tf.zeros_like(inputs) + self.std
+        dist = distributions.Normal(loc=inputs, scale=std)
+
+        pi = dist.sample()
+        logp_pi = dist.log_prob(pi)
+
+        return pi, logp_pi, dist, inputs
+
+
+class GaussianActor(tf.keras.Model):
+    def __init__(self, obs_dim, act_dim, size=32, num_layers=2):
+        super(GaussianActor, self).__init__(name='Actor')
+
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
+        
+        # Logits
+        self.logits = kl.Dense(act_dim[0])
+        # Sample
+        self.sample = ContinuousSample(act_dim[0])
+        
+        
+    def call(self, inputs):
+        x = self.layer_1(inputs)
+        x = self.layer_2(x)
+        x = self.logits(x)
+        x = self.sample(x)
+
+        return x
+
+
+class Critic(tf.keras.Model):
+    def __init__(self, obs_dim,
+                 size=32, num_layers=2):
+        super(Critic, self).__init__(name='Critic')
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
+        
+        # Logits
+        self.value = kl.Dense(1)
+        
+    def call(self, inputs):
+        x = self.layer_1(inputs)
+        x = self.layer_2(x)
+        x = self.value(x)
+
+        return x

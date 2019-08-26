@@ -49,7 +49,6 @@ class PPO_Agent:
 
     def critic_loss(self, t_value_n, p_value_n):
         value_loss = tf.keras.losses.mean_squared_error(y_true=t_value_n, y_pred=p_value_n)
-        value_loss = tf.reduce_mean(value_loss)
 
         return 0.5 * value_loss
 
@@ -57,41 +56,14 @@ class PPO_Agent:
     def train_step(self, obs_no, ac_na, old_log_prob_n, adv_n,
                    true_value_n):
 
-        # with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-        #     _, _, _, dist = self.actor(obs_no, training=True)
-        #     new_log_prob_n = dist.log_prob(ac_na)
-        #     entropies = dist.entropy()
-
-        #     # Need to recompute this to record the gradient in the gradient tape
-        #     pred_value_n = self.critic(obs_no)
-
-        #     # print(new_log_probs)
-        #     # print(entropies)
-        #     act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
-        #     crt_loss = self.critic_loss(true_value_n, pred_value_n)
-
-        # gradients_of_actor = act_tape.gradient(act_loss, self.actor.trainable_variables)
-        # gradients_of_critic = crt_tape.gradient(crt_loss, self.critic.trainable_variables)
-
-        # self.actor_opt.apply_gradients(zip(gradients_of_actor, self.actor.trainable_variables))
-        # self.critic_opt.apply_gradients(zip(gradients_of_critic, self.critic.trainable_variables))
-
-        # tf.print('std', self.actor.sample.std)
         with tf.GradientTape() as tape:
             locs, dist, _, _ = self.actor(obs_no, training=True)
-            # tf.print('obss', obs_no[0:5])
-            # tf.print('locs', locs[0:5])
-            # tf.print('acs', ac_na[0:5])
-            # tf.print('lp', old_log_prob_n[0:5])
             new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
 
             # Need to recompute this to record the gradient in the gradient tape
             pred_value_n = self.critic(obs_no)
 
-            # tf.print('new', new_log_prob_n[0:5])
-            # tf.print('old', old_log_prob_n[0:5])
-            # print(entropies)
             act_loss = self.actor_loss(new_log_prob_n, old_log_prob_n, entropies, adv_n)
             crt_loss = self.critic_loss(true_value_n, pred_value_n)
 
@@ -99,26 +71,8 @@ class PPO_Agent:
 
         variables = self.actor.trainable_variables + self.critic.trainable_variables
         gradients = tape.gradient(loss, variables)
-        # gradient_clip = 40
-        # grads, _ = tf.clip_by_global_norm(gradients, gradient_clip)
         self.opt.apply_gradients(zip(gradients, variables))
 
-
-    @tf.function
-    def my_step(self, obs_no, ac_na, old_log_prob_n):
-        locs, dist, _, _ = self.actor(obs_no, training=True)
-
-        # tf.print('obss', obs_no[0:5])
-        # tf.print('locs', locs[0:5])
-        # tf.print('acs', ac_na[0:5])
-        # tf.print('lp', old_log_prob_n[0:5])
-        new_log_prob_n = dist.log_prob(ac_na)
-        entropies = dist.entropy()
-        
-        diff = new_log_prob_n - old_log_prob_n
-        ratio = tf.exp(diff)
-        # tf.print('ratio shape', ratio.shape)
-        # tf.print('diff:', tf.reduce_mean(diff))
 
     def run_ite(self, obs_no, ac_na, log_prob_na, locs_na, t_val_n, adv_n,
                 epochs, batch_size=64):
