@@ -1,14 +1,16 @@
 import numpy as np
 
 
-def rollouts_generator(agent, env, horizon):
+def rollouts_generator(agent, env, is_continuous, horizon):
     """
     Generator function
     This function will continue generating
     samples as long as __next__() method is called
     """
     t = 0
-    ac = env.action_space.sample().astype(np.float64)
+    ac = env.action_space.sample()
+    if is_continuous:
+        ac = ac.astype(np.float64)
     ob = env.reset().astype(np.float64)
 
     cur_ep_ret = 0 # return in current episode
@@ -61,7 +63,8 @@ def rollouts_generator(agent, env, horizon):
         vpreds[i] = vpred
 
         # the ob and new here will be used in the next iteration of the while loop
-        ob, rew, new, _ = env.step(ac)
+        # print(ac.numpy())
+        ob, rew, new, _ = env.step(ac.numpy())
         # print(rew)
         rew = np.sum(rew)
         # print(ob, rew)

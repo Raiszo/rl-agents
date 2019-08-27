@@ -1,8 +1,10 @@
 import gym
 import numpy as np
 from pathlib import Path
-from rl_agents.ppo.policy import Actor, Critic
-from rl_agents.ppo.agent import PPO_Agent
+# from rl_agents.ppo.policy import Actor, Critic
+# from rl_agents.ppo.agent import PPO_Agent
+from rl_agents.vpg.agent import VPG_Agent
+from rl_agents.models import GaussianActor, CategoricalActor, Critic
 
 def render(agent, env, recorder=None):
     obs = env.reset()
@@ -14,7 +16,7 @@ def render(agent, env, recorder=None):
         if recorder: recorder.write(frame)
         ac = agent.act_deterministic(obs)
 
-        ob, rew, done, _ = env.step(ac)
+        ob, rew, done, _ = env.step(ac.numpy())
         # print(rew)
         total_rew += np.sum(rew)
 
@@ -37,9 +39,10 @@ def main():
     env = gym.make(args.env)
     is_continuous = isinstance(env.action_space, gym.spaces.Box)
     obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape
+    act_dim = env.action_space.shape if is_continuous else env.action_space.n
 
-    actor = Actor(obs_dim, act_dim, is_continuous)
+
+    actor = GaussianActor(obs_dim, act_dim) if is_continuous else CategoricalActor(obs_dim, act_dim)
     critic = Critic(obs_dim)
 
     rand_obs = env.observation_space.sample().astype(np.float64)
@@ -50,10 +53,10 @@ def main():
 
     actor.load_weights(weights_actor_file)
     critic.load_weights(weights_critic_file)
-    vero = PPO_Agent(actor, critic)
+    jen = VPG_Agent(actor, critic, is_continuous, act_dim)
 
 
-    render(vero, env)
+    render(jen, env)
     
     
 if __name__ == '__main__':

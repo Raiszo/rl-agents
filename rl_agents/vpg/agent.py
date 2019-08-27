@@ -3,11 +3,13 @@ from math import ceil
 import numpy as np
 
 class VPG_Agent:
-    def __init__(self, actor, critic,
+    def __init__(self, actor, critic, is_continuous, act_dim,
                  learning_rate=3e-4):
         self.actor = actor
         self.critic = critic
-        
+
+        self.act_dim = act_dim
+
         self.actor_opt = tf.keras.optimizers.Adam(3e-4)
         self.critic_opt = tf.keras.optimizers.Adam(1e-4)
 
@@ -94,13 +96,27 @@ class VPG_Agent:
         size = len(obs_no)
         train_indicies = np.arange(size)
 
+        # print(log_prob_na)
+        # return
+        # A discrete env, so ac_na is shape (n), need (n,act_dim)
+        if len(ac_na.shape) == 1:
+            acs = np.zeros((size, self.act_dim))
+            acs[np.arange(size), ac_na] = 1
+            ac_na = acs
+            # ac_na = tf.one_hot(ac_na, depth=self.act_dim)
+            # lp = np.zeros((size, self.act_dim))
+            # lp[np.arange(size), log_prob_na] = 1
+            # log_prob_na = lp
+
+        # print(ac_na)
+
         for i in range(int(ceil(size/batch_size))):
             start_idx = (i*batch_size)%size
             idx = train_indicies[start_idx:start_idx+batch_size]
 
             obs_no_b = obs_no[idx, :]
             ac_na_b = ac_na[idx, :]
-            log_prob_na_b = log_prob_na[idx, :]
+            log_prob_na_b = log_prob_na[idx]
 
             self.train_step_actor(obs_no_b, ac_na_b, adv_n[idx])
             for _ in range(80):
