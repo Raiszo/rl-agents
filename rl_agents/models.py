@@ -5,14 +5,13 @@ import tensorflow.keras.layers as kl
 
 
 class ContinuousSample(kl.Layer):
-    def __init__(self, action_dim, log_std=-0.53):
+    def __init__(self, action_dim):
         super(ContinuousSample, self).__init__(name='ContinuousSample')
 
-        s_init = tf.constant_initializer(np.exp(log_std))
-        self.std = tf.Variable(initial_value=s_init(shape=(1, action_dim),
-                                                    dtype='float64'),
-                               name='std',
-                               trainable=True)
+        # s_init = tf.constant_initializer(np.exp(log_std))
+        log_std = -0.53 * np.ones(action_dim, dtype=np.float64)
+        self.std = tf.Variable(initial_value=np.exp(log_std),
+                               name='std', trainable=True)
 
     def call(self, inputs):
         # If training return dist, else not
