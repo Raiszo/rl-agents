@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import os
 from pathlib import Path
 # from rl_agents.ppo.policy import Actor, Critic
 # from rl_agents.ppo.agent import PPO_Agent
@@ -16,12 +17,15 @@ def render(agent, env, recorder=None):
         if recorder: recorder.write(frame)
         ac = agent.act_deterministic(obs)
 
-        ob, rew, done, _ = env.step(ac.numpy())
-        # print(rew)
+        obs, rew, done, _ = env.step(ac.numpy())
         total_rew += np.sum(rew)
 
     print('Total reward at testig', total_rew)
 
+# def init(agent, env):
+#     obs = env.reset()
+#     ac = agent.act_deterministic(obs)
+    
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Render agent actions on environment')
@@ -31,8 +35,8 @@ def main():
     args = parser.parse_args()
 
 
-    weights_actor_file = args.logs_dir+'_actor_'+args.ite
-    weights_critic_file = args.logs_dir+'_critic_'+args.ite
+    weights_actor_file = os.path.join(args.logs_dir, '_actor_'+args.ite)
+    weights_critic_file = os.path.join(args.logs_dir, '_critic_'+args.ite)
     # assert Path(weights_actor_file).is_file(), 'Actor wights file does not exist >:v' 
         
 
@@ -54,6 +58,7 @@ def main():
     actor.load_weights(weights_actor_file)
     critic.load_weights(weights_critic_file)
     jen = VPG_Agent(actor, critic, is_continuous, act_dim)
+    
 
 
     render(jen, env)
