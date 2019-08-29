@@ -16,8 +16,8 @@ class ContinuousSample(kl.Layer):
     def call(self, inputs):
         # If training return dist, else not
         # So better to always return everything
-        std = tf.zeros_like(inputs) + self.std
-        dist = distributions.Normal(loc=inputs, scale=std)
+        # std = tf.zeros_like(inputs) + self.std
+        dist = distributions.Normal(loc=inputs, scale=self.std)
 
         pi = dist.sample()
         logp_pi = dist.log_prob(pi)
