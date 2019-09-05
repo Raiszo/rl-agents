@@ -3,14 +3,12 @@ from math import ceil
 import numpy as np
 
 class PPO_Agent:
-    def __init__(self,
-                 actor,
-                 critic,
-                 epsilon=0.2, learning_rate=1e-4):
+    def __init__(self, actor, critic, is_continuous, act_dim,
+                 epsilon=0.2, learning_rate=3e-4):
         self.actor = actor
         self.critic = critic
+
         self.epsilon = epsilon
-        
         self.alfa = learning_rate
         # self.actor_opt = tf.keras.optimizers.Adam(learning_rate)
         # self.critic_opt = tf.keras.optimizers.Adam(learning_rate)
@@ -20,16 +18,16 @@ class PPO_Agent:
 
     @tf.function
     def act_stochastic(self, obs):
-        loc, _, sample, log_prob = self.actor(obs[None], training=True)
+        pi, logp_pi, dist, loc = self.actor(obs[None])
         value = self.critic(obs[None])
 
-        return loc[0], sample[0], log_prob[0], value[0]
+        return pi[0], logp_pi[0], value[0]
 
 
     def act_deterministic(self, obs):
-        action, _, _, _ = self.actor(obs[None], training=False)
+        _, _, _, loc = self.actor(obs[None])
 
-        return action
+        return loc[0]
         
 
     def actor_loss(self, new_log_probs, old_log_probs, entropy, advs):
@@ -48,7 +46,7 @@ class PPO_Agent:
 
 
     def critic_loss(self, t_value_n, p_value_n):
-        value_loss = tf.keras.losses.mean_squared_error(y_true=t_value_n, y_pred=p_value_n)
+        value_loss = tf.reduce_mean((p_value_n - t_value_n)**2)
 
         return 0.5 * value_loss
 
@@ -57,7 +55,7 @@ class PPO_Agent:
                    true_value_n):
 
         with tf.GradientTape() as tape:
-            locs, dist, _, _ = self.actor(obs_no, training=True)
+            pi, logp_pi, dist, locs = self.actor(obs_no)
             new_log_prob_n = dist.log_prob(ac_na)
             entropies = dist.entropy()
 
@@ -74,10 +72,15 @@ class PPO_Agent:
         self.opt.apply_gradients(zip(gradients, variables))
 
 
-    def run_ite(self, obs_no, ac_na, log_prob_na, locs_na, t_val_n, adv_n,
+    def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
                 epochs, batch_size=64):
         size = len(obs_no)
         train_indicies = np.arange(size)
+
+        if len(ac_na.shape) == 1:
+            acs = np.zeros((size, self.act_dim))
+            acs[np.arange(size), ac_na] = 1
+            ac_na = acs
 
         for epoch in range(epochs):
             # for i in range(3):
@@ -87,21 +90,8 @@ class PPO_Agent:
                 # print(idx)
 
                 obs_no_b = obs_no[idx, :]
-                locs_na_b = locs_na[idx, :]
                 ac_na_b = ac_na[idx, :]
                 log_prob_na_b = log_prob_na[idx, :]
 
-                # print(epoch, i)
-                # print('------ batch ------')
-                # print('observations', obs_no_b[0:5])
-                # print('locs', locs_na_b[0:5])
-                # print('actions', ac_na_b[0:5])
-                # print('log_probs', log_prob_na_b[0:5])
-                # print(obs_no_b.shape)
-                # print(ac_na_b.shape)
-                # print(log_prob_na_b.shape)
-                # print('------ batch ------')
-
-                # self.my_step(obs_no_b, ac_na_b, log_prob_na_b)
                 self.train_step(obs_no_b, ac_na_b, log_prob_na_b, adv_n[idx], t_val_n[idx])
-                # self.train_step(obs[idx, :], ac[idx, :], log_prob[idx], adv[idx], t_val[idx])
+
