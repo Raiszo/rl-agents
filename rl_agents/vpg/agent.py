@@ -11,7 +11,7 @@ class VPG_Agent:
         self.act_dim = act_dim
 
         self.actor_opt = tf.keras.optimizers.Adam(3e-4)
-        self.critic_opt = tf.keras.optimizers.Adam(1e-4)
+        self.critic_opt = tf.keras.optimizers.Adam(1e-3)
 
         self.MSE = tf.keras.losses.MeanSquaredError()
 
@@ -53,10 +53,11 @@ class VPG_Agent:
         with tf.GradientTape() as crt_tape:
             pval_n = self.critic(obs_no)
 
-            value_loss = self.MSE(
-                y_true=tval_n,
-                y_pred=pval_n,
-            )
+            value_loss = tf.reduce_mean((pval_n - tval_n)**2)
+            # value_loss = self.MSE(
+            #     y_true=tval_n,
+            #     y_pred=pval_n,
+            # )
 
             crt_loss = value_loss
 
