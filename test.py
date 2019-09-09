@@ -2,10 +2,12 @@ import gym
 import numpy as np
 import os
 from pathlib import Path
-# from rl_agents.ppo.policy import Actor, Critic
-# from rl_agents.ppo.agent import PPO_Agent
+
 from rl_agents.vpg.agent import VPG_Agent
-from rl_agents.models import GaussianActor, CategoricalActor, Critic
+from rl_agents.ppo.agent import PPO_Agent
+from rl_agents.common import Critic
+from rl_agents.policies.categorical import CategoricalActor
+from rl_agents.policies.gaussian import GaussianActor
 
 def render(agent, env, recorder=None):
     obs = env.reset()

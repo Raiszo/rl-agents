@@ -22,7 +22,10 @@ def rollouts_generator(agent, env, is_continuous, horizon):
 
     obs = np.array([ob for _ in range(horizon)])
     acs = np.array([ac for _ in range(horizon)])
-    log_probs = np.array([ac for _ in range(horizon)])
+    if is_continuous:
+        log_probs = np.array([ac for _ in range(horizon)])
+    else:
+        log_probs = np.zeros(horizon, 'float64')
     vpreds = np.zeros(horizon, 'float64')
 
     news = np.zeros(horizon, 'int32')
