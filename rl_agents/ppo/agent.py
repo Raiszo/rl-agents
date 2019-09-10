@@ -45,31 +45,35 @@ class PPO_Agent:
 
 
     @tf.function
-    def train_step(self, obs_no, ac_na, old_log_prob_n, adv_n,
-                   true_value_n):
-
+    def act_step(self, obs_no, ac_na, old_log_prob_n, adv_n):
         with tf.GradientTape() as tape:
-            # Compute critic loss
+            # Compute new log probs
             _, _, dist, _ = self.actor(obs_no)
-            new_log_prob_n = dist.log_prob(ac_na)
-    
-            act_loss = self.surrogate_loss(new_log_prob_n, old_log_prob_n, adv_n)
+            new_log_prob_na = dist.log_prob(ac_na)
+
+            # Compute surrogate loss
+            surr_loss = self.surrogate_loss(new_log_prob_n, old_log_prob_n, adv_n)
+            # Can only calculate a valid entropy for gaussian distribution
             if self.is_continuous:
-                act_loss += - 0.01 * tf.reduce_mean(dist.entropy())
+                ent_loss = tf.reduce_mean(dist.entropy())
+            else:
+                ent_loss = 0.0
 
-            # Compute actor loss
-            pred_value_n = self.critic(obs_no)
+            loss = act_loss - 0.01*ent_loss
 
-            crt_loss = tf.reduce_mean((pred_value_n - true_value_n)**2)
-            crt_loss = 0.5 * crt_loss
+        gradients = tape.gradient(loss, self.actor.trainable_variables)
+        self.actor_opt.apply_gradients(zip(gradients, variables))
 
-            # For a single update for both actor & critic sum both of 'em
-            loss = act_loss + crt_loss
 
-        variables = self.actor.trainable_variables + self.critic.trainable_variables
-        gradients = tape.gradient(loss, variables)
-        self.opt.apply_gradients(zip(gradients, variables))
+    @tf.function
+    def crt_step(self, obs_no, true_value_n):
+        with tf.GradientTape() as tape:
+            loss = tf.reduce_mean((pred_value_n - true_value_n)**2)
+            loss = 0.5 * crt_loss
 
+        gradients = tape.gradient(loss, self.critic.trainable_variables)
+        self.critic_opt.apply_gradients(zip(gradients, variables))
+    
 
     def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
                 epochs, batch_size=64):
