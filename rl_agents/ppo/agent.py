@@ -45,7 +45,7 @@ class PPO_Agent:
 
 
     @tf.function
-    def act_step(self, obs_no, ac_na, old_log_prob_n, adv_n):
+    def actor_step(self, obs_no, ac_na, old_log_prob_n, adv_n):
         with tf.GradientTape() as tape:
             # Compute new log probs
             _, _, dist, _ = self.actor(obs_no)
@@ -66,7 +66,7 @@ class PPO_Agent:
 
 
     @tf.function
-    def crt_step(self, obs_no, true_value_n):
+    def critic_step(self, obs_no, true_value_n):
         with tf.GradientTape() as tape:
             loss = tf.reduce_mean((pred_value_n - true_value_n)**2)
             loss = 0.5 * crt_loss
@@ -85,15 +85,37 @@ class PPO_Agent:
             acs[np.arange(size), ac_na] = 1
             ac_na = acs
 
-        for epoch in range(epochs):
+        """
+        Remember the old school way to do it: 
             for i in range(int(ceil(size/batch_size))):
                 start_idx = (i*batch_size)%size
                 idx = train_indicies[start_idx:start_idx+batch_size]
-                # print(idx)
+                obs_no[idx, :]
+        
+        Train actor with inptus: obs, ac, logp, adv
+        """
+        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_na, adv_n))
+        act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs)
 
-                obs_no_b = obs_no[idx, :]
-                ac_na_b = ac_na[idx, :]
-                log_prob_na_b = log_prob_na[idx]
+        crt_ds = tf.data.Dataset.from_tensor_slices((obs_no, t_val_n))
+        crt_ds = crt_ds.shuffle(512).batch(batch_size).repeat(epochs)
 
-                self.train_step(obs_no_b, ac_na_b, log_prob_na_b, adv_n[idx], t_val_n[idx])
+        for obs, ac, logp, adv in act_ds:
+            self.actor_step(obs, ac, logp, adv)
+
+        for obs, t_val in crt_ds:
+            self.critic_step(obs, t_val)
+            
+
+        # for epoch in range(epochs):
+        #     for i in range(int(ceil(size/batch_size))):
+        #         start_idx = (i*batch_size)%size
+        #         idx = train_indicies[start_idx:start_idx+batch_size]
+        #         # print(idx)
+
+        #         obs_no_b = obs_no[idx, :]
+        #         ac_na_b = ac_na[idx, :]
+        #         log_prob_na_b = log_prob_na[idx]
+
+        #         self.train_step(obs_no_b, ac_na_b, log_prob_na_b, adv_n[idx], t_val_n[idx])
 
