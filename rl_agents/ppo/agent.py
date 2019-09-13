@@ -45,34 +45,35 @@ class PPO_Agent:
 
 
     @tf.function
-    def actor_step(self, obs_no, ac_na, old_log_prob_n, adv_n):
+    def actor_step(self, obs_no, ac_na, old_log_prob_na, adv_n):
         with tf.GradientTape() as tape:
             # Compute new log probs
             _, _, dist, _ = self.actor(obs_no)
             new_log_prob_na = dist.log_prob(ac_na)
 
             # Compute surrogate loss
-            surr_loss = self.surrogate_loss(new_log_prob_n, old_log_prob_n, adv_n)
+            surr_loss = self.surrogate_loss(new_log_prob_na, old_log_prob_na, adv_n)
             # Can only calculate a valid entropy for gaussian distribution
             if self.is_continuous:
                 ent_loss = tf.reduce_mean(dist.entropy())
             else:
                 ent_loss = 0.0
 
-            loss = act_loss - 0.01*ent_loss
+            loss = surr_loss - 0.01*ent_loss
 
         gradients = tape.gradient(loss, self.actor.trainable_variables)
-        self.actor_opt.apply_gradients(zip(gradients, variables))
+        self.actor_opt.apply_gradients(zip(gradients, self.actor.trainable_variables))
 
 
     @tf.function
     def critic_step(self, obs_no, true_value_n):
         with tf.GradientTape() as tape:
+            pred_value_n = self.critic(obs_no)
             loss = tf.reduce_mean((pred_value_n - true_value_n)**2)
-            loss = 0.5 * crt_loss
+            loss = 0.5 * loss
 
         gradients = tape.gradient(loss, self.critic.trainable_variables)
-        self.critic_opt.apply_gradients(zip(gradients, variables))
+        self.critic_opt.apply_gradients(zip(gradients, self.critic.trainable_variables))
     
 
     def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,

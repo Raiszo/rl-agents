@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 import datetime
 from os import path
 
@@ -42,9 +43,11 @@ class Sensei:
             self.agent.run_ite(rollout['ob'], rollout['ac'], rollout['log_probs'], target_value, adv, epochs=self.epochs, batch_size=batch_size)
             with summary_writer.as_default():
                 tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
-    
-            if i % 50 == 0 or i == num_ite-1:
-                self.actor.save_weights(log_dir+'/_actor_'+str(i), save_format='tf')
+
+            # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )
+            if i % 50 == 0 or i == self.num_ite-1:
+                self.agent.actor.save_weights(log_dir+'/_actor_'+str(i), save_format='tf')
+                self.agent.critic.save_weights(log_dir+'/_critic_'+str(i), save_format='tf')
 
 
     def test(self):
