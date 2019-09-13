@@ -77,7 +77,7 @@ class PPO_Agent:
     
 
     def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
-                epochs, batch_size=64):
+                epochs, batch_size):
         size = len(obs_no)
         train_indicies = np.arange(size)
 
