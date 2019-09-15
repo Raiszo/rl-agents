@@ -26,6 +26,7 @@ class PPO_Agent:
         return pi[0], logp_pi[0], value[0]
 
 
+    @tf.function
     def act_deterministic(self, obs):
         _, _, _, loc = self.actor(obs[None])
 
@@ -66,10 +67,10 @@ class PPO_Agent:
 
 
     @tf.function
-    def critic_step(self, obs_no, true_value_n):
+    def critic_step(self, obs_no, tval_n):
         with tf.GradientTape() as tape:
-            pred_value_n = self.critic(obs_no)
-            loss = tf.reduce_mean((pred_value_n - true_value_n)**2)
+            pval_n = self.critic(obs_no)
+            loss = tf.reduce_mean((pval_n - tval_n)**2)
             loss = 0.5 * loss
 
         gradients = tape.gradient(loss, self.critic.trainable_variables)
@@ -77,7 +78,7 @@ class PPO_Agent:
     
 
     def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
-                epochs, batch_size):
+                epochs_actor, epochs_critic, batch_size):
         size = len(obs_no)
         train_indicies = np.arange(size)
 
