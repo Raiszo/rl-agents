@@ -29,8 +29,9 @@ class PPO_Agent:
     @tf.function
     def act_deterministic(self, obs):
         _, _, _, loc = self.actor(obs[None])
+        value = self.critic(obs[None])
 
-        return loc[0]
+        return loc[0], value[0]
         
 
     def surrogate_loss(self, new_logp_pi, old_logp_pi, advs):

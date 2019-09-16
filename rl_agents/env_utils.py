@@ -69,7 +69,8 @@ def rollouts_generator(agent, env, is_continuous, horizon):
         # print(ac.numpy())
         ob, rew, new, _ = env.step(ac.numpy())
         # print(rew)
-        rew = np.sum(rew)
+        # rew = rew - 5
+        # rew = np.sum(rew)
         # print(ob, rew)
 
         rews[i] = rew
@@ -93,7 +94,7 @@ def get_adv_vtarg(roll, lam, gamma):
     new = np.append(roll["new"], 0)
 
     gae_adv = np.empty(T, 'float64')
-    # target_val = np.empty(T, 'float64')
+    target_val = np.empty(T, 'float64')
     
     vpred = np.append(roll["vpred"], roll["next_vpred"])
 
@@ -105,7 +106,7 @@ def get_adv_vtarg(roll, lam, gamma):
         delta = - vpred[t] + (is_terminal * gamma * vpred[t+1] + roll["rew"][t])
         gae_adv[t] = last_gae = delta + gamma*lam*last_gae*is_terminal
 
-        # target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
-    target_val = gae_adv + roll["vpred"]
+        target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
+    # target_val = gae_adv + roll["vpred"]
 
     return gae_adv, target_val

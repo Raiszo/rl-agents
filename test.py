@@ -17,7 +17,9 @@ def render(agent, env, recorder=None):
     while not done:
         frame = env.render(mode='rgb_array')
         if recorder: recorder.write(frame)
-        ac = agent.act_deterministic(obs)
+        ac, v = agent.act_deterministic(obs)
+
+        print(ac, v)
 
         obs, rew, done, _ = env.step(ac.numpy())
         total_rew += np.sum(rew)
@@ -59,7 +61,8 @@ def main():
 
     actor.load_weights(weights_actor_file)
     critic.load_weights(weights_critic_file)
-    jen = VPG_Agent(actor, critic, is_continuous, act_dim)
+    # jen = VPG_Agent(actor, critic, is_continuous, act_dim)
+    jen = PPO_Agent(actor, critic, is_continuous, act_dim)
     
 
 
