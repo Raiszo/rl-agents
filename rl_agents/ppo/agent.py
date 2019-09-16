@@ -97,10 +97,10 @@ class PPO_Agent:
         Train actor with inptus: obs, ac, logp, adv
         """
         act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_na, adv_n))
-        act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs)
+        act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs_critic)
 
         crt_ds = tf.data.Dataset.from_tensor_slices((obs_no, t_val_n))
-        crt_ds = crt_ds.shuffle(512).batch(batch_size).repeat(epochs)
+        crt_ds = crt_ds.shuffle(512).batch(batch_size).repeat(epochs_actor)
 
         for obs, ac, logp, adv in act_ds:
             self.actor_step(obs, ac, logp, adv)

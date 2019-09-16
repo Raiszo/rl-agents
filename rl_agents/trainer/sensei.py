@@ -28,11 +28,12 @@ class Sensei:
         is_continuous = self.agent.is_continuous
         self.generator = rollouts_generator(agent, env_fn(), is_continuous, horizon)
 
+        env = self.env_fn()
         folder_name = '{}_{}'.format(env.unwrapped.spec.id, self.alg_name)
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
         self.log_dir = path.join(self.log_dir, folder_name, current_time)
-        self.summary_writer = tf.summary.create_file_writer(log_dir)
+        self.summary_writer = tf.summary.create_file_writer(self.log_dir)
 
         
     def train(self, batch_size=64) -> None:
