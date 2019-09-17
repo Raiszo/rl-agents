@@ -89,7 +89,7 @@ def rollouts_generator(agent, env, is_continuous, horizon):
 
 # def GAE(rewards, value, news):
     
-def get_adv_vtarg(roll, lam, gamma):
+def get_gaeadv_vtarg(roll, lam, gamma):
     T = len(roll["ob"])
     new = np.append(roll["new"], 0)
 
@@ -110,3 +110,25 @@ def get_adv_vtarg(roll, lam, gamma):
     # target_val = gae_adv + roll["vpred"]
 
     return gae_adv, target_val
+
+
+def get_adv_vtarg(roll, gamma):
+    T = len(roll["ob"])
+    new = np.append(roll["new"], 0)
+
+    adv = np.empty(T, 'float64')
+    target_val = np.empty(T, 'float64')
+    
+    vpred = np.append(roll["vpred"], roll["next_vpred"])
+
+    sum_rew = 0
+    for t in reversed(range(T)):
+        # check this, when is_terminal = 1-new[t], everything crushes like crazy
+        # If the next step is corresponds to a new iteration, then this is the end
+        is_terminal = 1-new[t+1]
+        sum_rew = is_terminal * (sum_rew + roll["rew"][t])
+        adv[t] = - vpred[t] + sum_rew
+
+        target_val[t] = is_terminal * gamma * vpred[t+1] + roll["rew"][t]
+
+    return adv, target_val    

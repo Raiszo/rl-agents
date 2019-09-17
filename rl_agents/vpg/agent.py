@@ -34,6 +34,11 @@ class VPG_Agent:
 
     @tf.function
     def actor_step(self, obs_no, ac_na, adv_n):
+        tf.print('+++ actor')
+        tf.print(obs_no.shape)
+        tf.print(ac_na.shape)
+        tf.print(adv_n.shape)
+        tf.print('+++ actor')
         with tf.GradientTape() as tape:
             # Maybe should add arg trainning=True
             pi, logp_pi, dist, locs = self.actor(obs_no)
@@ -55,8 +60,13 @@ class VPG_Agent:
 
     @tf.function
     def critic_step(self, obs_no, tval_n):
+        tf.print('+++ critic')
+        tf.print(obs_no.shape)
+        tf.print(tval_n.shape)
+        tf.print('+++ critic')
         with tf.GradientTape() as tape:
             pval_n = self.critic(obs_no)
+            tf.print('predicted', pval_n.shape)
 
             loss = tf.reduce_mean((pval_n - tval_n)**2)
             loss = 0.5 * loss

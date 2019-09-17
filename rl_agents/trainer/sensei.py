@@ -4,19 +4,17 @@ import datetime
 from os import path
 
 
-from rl_agents.env_utils import rollouts_generator, get_adv_vtarg
+from rl_agents.env_utils import rollouts_generator, get_adv_vtarg, get_gaeadv_vtarg
 
 class Sensei:
     def __init__(self, agent, alg_name, env_fn,
-                 ite=200, horizon=2048,
-                 epochs_actor=20, epochs_critic=20,
+                 horizon=2048, epochs_actor=20, epochs_critic=20,
                  gamma=0.99, gae_lambda=0.95,
                  log_dir='logs'):
         self.agent = agent
         self.alg_name = alg_name
         self.env_fn = env_fn
 
-        self.num_ite = ite
         self.horizon = horizon
         self.epochs_actor = epochs_actor
         self.epochs_critic = epochs_critic
@@ -36,23 +34,26 @@ class Sensei:
         self.summary_writer = tf.summary.create_file_writer(self.log_dir)
 
         
-    def train(self, batch_size=64) -> None:
+    def train(self, num_ite, record=True, batch_size=64) -> None:
         env = self.env_fn()
 
-        for i in range(self.num_ite):
+        for i in range(num_ite):
             rollout = self.generator.__next__()
-            adv, target_value = get_adv_vtarg(rollout, lam=self.gae_lambda, gamma=self.gamma)
+            adv, target_value = get_gaeadv_vtarg(rollout, lam=self.gae_lambda, gamma=self.gamma)
+            # adv, target_value = get_adv_vtarg(rollout, gamma=self.gamma)
             adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     
             self.agent.run_ite(rollout['ob'], rollout['ac'], rollout['log_probs'], target_value, adv, epochs_actor=self.epochs_actor, epochs_critic=self.epochs_critic, batch_size=batch_size)
-            with self.summary_writer.as_default():
-                tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
 
-            log_dir = self.log_dir
-            # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )
-            if i % 50 == 0 or i == self.num_ite-1:
-                self.agent.actor.save_weights(log_dir+'/_actor_'+str(i), save_format='tf')
-                self.agent.critic.save_weights(log_dir+'/_critic_'+str(i), save_format='tf')
+            if record:
+                with self.summary_writer.as_default():
+                    tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
+
+                log_dir = self.log_dir
+                # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )
+                if i % 50 == 0 or i == num_ite-1:
+                    self.agent.actor.save_weights(log_dir+'/_actor_'+str(i), save_format='tf')
+                    self.agent.critic.save_weights(log_dir+'/_critic_'+str(i), save_format='tf')
 
 
     def test(self):
