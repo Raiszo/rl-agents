@@ -1,4 +1,5 @@
 numpy
 gym
-tensorflow==2.0.0-alpha0
-tensorflow-probability
+tensorflow==2.0.0-rc0
+tensorflow-probability==0.8.0rc0
+gast==0.2.2

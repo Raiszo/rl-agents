@@ -31,13 +31,13 @@ class GaussianActor(tf.keras.Model):
 
         self.act_dim = act_dim
 
-        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
-        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh, dtype='float64')
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh, dtype='float64')
         
         # Logits
-        self.logits = kl.Dense(act_dim[0])
+        self.logits = kl.Dense(act_dim[0], dtype='float64')
         # Sample
-        self.sample = ContinuousSample(act_dim[0])
+        self.sample = ContinuousSample(act_dim[0], dtype='float64')
         
         
     def call(self, inputs):

@@ -7,11 +7,11 @@ class Critic(tf.keras.Model):
     def __init__(self, obs_dim,
                  size=32, num_layers=2):
         super(Critic, self).__init__(name='Critic')
-        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh)
-        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh)
+        self.layer_1 = kl.Dense(size, input_shape=obs_dim, activation=tf.keras.activations.tanh, dtype='float64')
+        self.layer_2 = kl.Dense(size, activation=tf.keras.activations.tanh, dtype='float64')
         
         # Logits
-        self.value = kl.Dense(1)
+        self.value = kl.Dense(1, dtype='float64')
         
     def call(self, inputs):
         x = self.layer_1(inputs)
