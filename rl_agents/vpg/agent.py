@@ -14,7 +14,7 @@ class VPG_Agent:
         self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
         self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
         self.opt = tf.keras.optimizers.Adam(ac_lr)
-        # self.MSE = tf.keras.losses.MeanSquaredError()
+        self.MSE = tf.keras.losses.MeanSquaredError()
 
 
     @tf.function
@@ -34,11 +34,6 @@ class VPG_Agent:
 
     @tf.function
     def actor_step(self, obs_no, ac_na, adv_n):
-        # tf.print('+++ actor')
-        # tf.print(obs_no.shape)
-        # tf.print(ac_na.shape)
-        # tf.print(adv_n.shape)
-        # tf.print('+++ actor')
         with tf.GradientTape() as tape:
             # Maybe should add arg trainning=True
             pi, logp_pi, dist, locs = self.actor(obs_no)
@@ -50,6 +45,9 @@ class VPG_Agent:
             else:
                 ent_loss = 0.0
 
+            # tf.print('adv', adv_n[:10])
+            # tf.print('logp', logp_ac_n[:10])
+            # tf.print('adv', adv_n.shape)
 
             loss = - pg_loss - 0.01*ent_loss
 
@@ -60,24 +58,24 @@ class VPG_Agent:
 
     @tf.function
     def critic_step(self, obs_no, tval_n):
-        # tf.print('+++ critic')
-        # tf.print(obs_no.shape)
-        # tf.print(tval_n.shape)
-        # tf.print('+++ critic')
         with tf.GradientTape() as tape:
             pval_n = self.critic(obs_no)
-            # tf.print('predicted', pval_n.shape)
+            pval_n = tf.squeeze(pval_n)
 
-            loss = tf.reduce_mean((pval_n - tval_n)**2)
+            loss = tf.reduce_mean((tval_n - pval_n)**2)
             loss = 0.5 * loss
-            # value_loss = self.MSE(
+            # print('tval', tval_n.shape)
+            # print('pval', pval_n.shape)
+
+            # loss = self.MSE(
             #     y_true=tval_n,
             #     y_pred=pval_n,
             # )
+            # tf.print('loss', loss)
 
         tvars = self.critic.trainable_variables
         grad = tape.gradient(loss, tvars)
-        self.critic_opt.apply_gradients(zip(grad, tvars)) 
+        self.critic_opt.apply_gradients(zip(grad, tvars))
    
 
     def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
@@ -85,7 +83,7 @@ class VPG_Agent:
         size = len(obs_no)
         train_indicies = np.arange(size)
 
-        if len(ac_na.shape) == 1:
+        if not self.is_continuous:
             acs = np.zeros((size, self.act_dim))
             acs[np.arange(size), ac_na] = 1
             ac_na = acs
@@ -101,3 +99,11 @@ class VPG_Agent:
 
         for obs, t_val in crt_ds:
             self.critic_step(obs, t_val)
+
+        t_pred_n = tf.squeeze(self.critic(obs_no))
+        test_loss = self.MSE(
+            y_true=t_val_n,
+            y_pred=t_pred_n,
+        )
+
+        return test_loss, t_pred_n

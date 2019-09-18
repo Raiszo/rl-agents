@@ -40,14 +40,18 @@ class Sensei:
         for i in range(num_ite):
             rollout = self.generator.__next__()
             adv, target_value = get_gaeadv_vtarg(rollout, lam=self.gae_lambda, gamma=self.gamma)
+            print(adv[:200])
+            print(target_value[:200])
             # adv, target_value = get_adv_vtarg(rollout, gamma=self.gamma)
             adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     
-            self.agent.run_ite(rollout['ob'], rollout['ac'], rollout['log_probs'], target_value, adv, epochs_actor=self.epochs_actor, epochs_critic=self.epochs_critic, batch_size=batch_size)
+            v_loss, tpred = self.agent.run_ite(rollout['ob'], rollout['ac'], rollout['log_probs'], target_value, adv, epochs_actor=self.epochs_actor, epochs_critic=self.epochs_critic, batch_size=batch_size)
+            print(tpred[:200])
 
             if record:
                 with self.summary_writer.as_default():
                     tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
+                    tf.summary.scalar('value loss', v_loss, step=i)
 
                 log_dir = self.log_dir
                 # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )
