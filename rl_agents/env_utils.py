@@ -1,5 +1,23 @@
 import numpy as np
 
+class Buffer:
+    def __init__(self, agent, env, is_continuous, horizon):
+        self.agent = agent
+        self.env = env
+        self.is_continuous = is_continuous
+        self.horizon = horizon
+
+        self.t = 0
+        self.
+
+
+    def __iter__(self):
+        
+        return self
+
+    def __next__(self):
+        
+
 
 def rollouts_generator(agent, env, is_continuous, horizon):
     """
