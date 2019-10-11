@@ -1,5 +1,11 @@
 from abc import ABC, abstractmethod
 
+def combined_shape(length, shape):
+    return (length, shape) 
+    if shape is None:
+        return (length,)
+    return (length, shape) if np.isscalar(shape) else (length, *shape)
+
 class OnPolicyBuffer(ABC):
     @abstractmethod
     def get_advantage(self):
@@ -13,6 +19,14 @@ class OnPolicyBuffer(ABC):
 
         self.t = 0
 
+        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float64)
+        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float64)
+        self.logp_buf = np.zeros(size, dtype=np.float64)
+        self.rew_buf = np.zeros(size, dtype=np.float64)
+        self.val_buf = np.zeros(size, dtype=np.float64)
+        self.gamma, self.lam = gamma, lam
+
+        self.ptr, self.path_start_idx, self.max_size = 0, 0, size
         ac = env.action_space.sample()
         if is_continuous:
             ac = ac.astype(np.float64)

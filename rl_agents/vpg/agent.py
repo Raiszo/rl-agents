@@ -37,7 +37,8 @@ class VPG_Agent:
         with tf.GradientTape() as tape:
             # Maybe should add arg trainning=True
             pi, logp_pi, dist, locs = self.actor(obs_no)
-            logp_ac_n = dist.log_prob(ac_na)
+            # Log probs for action dim > 1 are the sum of the result from dist.log_prob
+            logp_ac_n = tf.reduce_sum(dist.log_prob(ac_na), axis=1)
 
             pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
             if self.is_continuous:
