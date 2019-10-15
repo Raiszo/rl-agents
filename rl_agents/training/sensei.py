@@ -6,6 +6,39 @@ from os import path
 
 from rl_agents.env_utils import rollouts_generator, get_adv_vtarg, get_gaeadv_vtarg
 
+
+class Lel(ABC):
+    def __init__(self, agent, env, is_continuous, num_ite):
+        self.agent = agent
+        self.env = env
+        self.is_continuous = is_continuous
+        self.horizon = horizon
+        self.num_ite = num_ite
+
+        self.ite = 0
+        
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        for i in range(num_ite):
+            act, log_prob, val = agent.act_stochastic(obs)
+
+            obs, rew, new, _ = env.step(act.numpy())
+
+            if new:
+                obs = env.reset()
+
+        self.last_obs = obs
+
+        return {
+            "obs": self.obs_buf,
+            "act": self.act_buf,
+            "val": self.val_buf,
+        }
+
+
+
 class Sensei:
     def __init__(self, agent, alg_name, env_fn,
                  horizon=2048, epochs_actor=20, epochs_critic=20,
