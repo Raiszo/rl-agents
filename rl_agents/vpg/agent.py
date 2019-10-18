@@ -55,7 +55,7 @@ class VPG_Agent:
         tvars = self.actor.trainable_variables
         grad = tape.gradient(loss, tvars)
         self.actor_opt.apply_gradients(zip(grad, tvars)) 
-
+        
 
     @tf.function
     def critic_step(self, obs_no, tval_n):
@@ -100,11 +100,3 @@ class VPG_Agent:
 
         for obs, t_val in crt_ds:
             self.critic_step(obs, t_val)
-
-        t_pred_n = tf.squeeze(self.critic(obs_no))
-        test_loss = self.MSE(
-            y_true=t_val_n,
-            y_pred=t_pred_n,
-        )
-
-        return test_loss, t_pred_n
