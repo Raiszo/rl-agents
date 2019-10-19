@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import numpy as np
 
 def combined_shape(length, shape):
     return (length, shape) 
@@ -14,6 +15,7 @@ class OnPolicyBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
+        print(obs_dim, act_dim)
         self.obs_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
         self.act_buf = np.zeros(combined_shape(size, act_dim), dtype=np.float32)
         self.adv_buf = np.zeros(size, dtype=np.float32)
@@ -83,4 +85,32 @@ class OnPolicyBuffer:
             "val": self.val_buf,
         }
 
+def discount_cumsum(x, discount):
+    """
+    magic from rllab for computing discounted cumulative sums of vectors.
+    input: 
+        vector x, 
+        [x0, 
+         x1, 
+         x2]
+    output:
+        [x0 + discount * x1 + discount^2 * x2,  
+         x1 + discount * x2,
+         x2]
+    """
+    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
+
+class GAE_Buffer(OnPolicyBuffer):
+    def __init__(self, obs_dim, act_dim, size, gamma, lam):
+        super().__init__(obs_dim, act_dim, size)
+
+    def get_advantage(self, rews, vals):
+        # the next two lines implement GAE-Lambda advantage calculation
+        deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
+        adv = discount_cumsum(deltas, self.gamma * self.lam)
+        
+        # the next line computes rewards-to-go, to be targets for the value function
+        ret = discount_cumsum(rews, self.gamma)[:-1]
+
+        return adv, ret

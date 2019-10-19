@@ -3,10 +3,6 @@ import numpy as np
 import datetime
 from os import path
 
-from rl_agents.utils import is_continuous
-from rl_agents.env_utils import rollouts_generator, get_adv_vtarg, get_gaeadv_vtarg
-
-
 class ExperimentRunner:
     def __init__(self, agent, env, buff):
         self.agent = agent
@@ -52,7 +48,7 @@ class Sensei:
         self.alg_name = alg_name
         self.env_fn = env_fn
         env = env_fn()
-        self.experiment_runner = ExperimentRunner(agent, env, buff, )
+        self.experiment_runner = ExperimentRunner(agent, env, buff)
 
         self.epochs_actor = epochs_actor
         self.epochs_critic = epochs_critic
