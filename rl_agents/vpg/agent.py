@@ -3,13 +3,13 @@ from math import ceil
 import numpy as np
 
 class VPG_Agent:
-    def __init__(self, actor, critic, is_continuous, act_dim,
+    def __init__(self, actor, critic, is_continuous, act_dim, # just pass the env
                  learning_rate=3e-4, ac_lr=3e-4, cr_lr=1e-3):
         self.actor = actor
         self.critic = critic
 
-        self.is_continuous = is_continuous
-        self.act_dim = act_dim
+        self.is_continuous = is_continuous # change this too
+        self.act_dim = act_dim  # TODO change this
 
         self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
         self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
