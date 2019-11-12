@@ -3,12 +3,12 @@ from math import ceil
 import numpy as np
 
 class VPG_Agent:
-    def __init__(self, actor, critic, is_continuous, act_dim, # just pass the env
+    def __init__(self, actor, critic, act_dim, # just pass the env
                  learning_rate=3e-4, ac_lr=3e-4, cr_lr=1e-3):
         self.actor = actor
         self.critic = critic
 
-        self.is_continuous = is_continuous # change this too
+        # self.is_continuous = is_continuous # change this too
         self.act_dim = act_dim  # TODO change this
 
         self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
@@ -41,10 +41,11 @@ class VPG_Agent:
             logp_ac_n = tf.reduce_sum(dist.log_prob(ac_na), axis=1)
 
             pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
-            if self.is_continuous:
-                ent_loss = tf.reduce_mean(dist.entropy())
-            else:
-                ent_loss = 0.0
+            ent_loss = tf.reduce_mean(dist.entropy())
+            # if self.is_continuous:
+            #     ent_loss = tf.reduce_mean(dist.entropy())
+            # else:
+            #     ent_loss = 0.0
 
             # tf.print('adv', adv_n[:10])
             # tf.print('logp', logp_ac_n[:10])

@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
-def combined_shape(length, shape):
-    return (length, shape) 
+def combined_shape(length, shape=None):
+    # return (length, shape) 
     if shape is None:
         return (length,)
     return (length, shape) if np.isscalar(shape) else (length, *shape)
@@ -15,7 +15,7 @@ class OnPolicyBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
-        print(obs_dim, act_dim)
+        # print(obs_dim, act_dim)
         self.obs_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
         self.act_buf = np.zeros(combined_shape(size, act_dim), dtype=np.float32)
         self.adv_buf = np.zeros(size, dtype=np.float32)
