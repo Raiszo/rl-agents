@@ -12,30 +12,41 @@ class ExperimentRunner:
 
         self.ite = 0
 
+        self.last_obs = None
+        self.one_new = False
+
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.ite >= self.num_ite:
-            self.ite = 0        # one can rerun it later :3
-            raise StopIteration
-        elif self.ite == 0:
+        if self.ite == 0:
             obs = self.env.reset()
+        elif self.ite > 0 and self.ite < self.num_ite:
+            obs = self.last_obs
+        else:
+            self.ite = 0
+            self.one_new = False
+            raise StopIteration
 
-        for i in range(self.exp_buffer):
-            act, log_prob, val = agent.act_stochastic(obs)
-            obs, rew, new, _ = env.step(act.numpy())
+        for i in range(len(self.buff)):
+            act, log_prob, val = self.agent.act_stochastic(obs)
+            obs, rew, new, _ = self.env.step(act.numpy())
 
             self.buff.store(obs, act, rew, val, log_prob)
 
             if new:
-                _, _, last_val = agent.act_stochastic(obs)
+                self.one_new = True
+                _, _, last_val = self.agent.act_stochastic(obs)
                 self.buff.finish_path(last_val)
 
-                obs = env.reset()
+                obs = self.env.reset()
                 new = False
 
+        if not self.one_new:
+            self.buff.finish_path()
+
         self.ite += 1
+        self.last_obs = obs
 
         return self.buff.get()
 

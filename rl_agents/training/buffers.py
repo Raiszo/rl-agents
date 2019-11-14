@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy.signal import lfilter
 
 def combined_shape(length, shape=None):
     # return (length, shape) 
@@ -23,8 +24,15 @@ class OnPolicyBuffer:
         self.ret_buf = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buf = np.zeros(size, dtype=np.float32)
+        self.size = size
 
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
+
+    def __len__(self):
+        """
+        So len(buff) works
+        """
+        return self.size
 
     def store(self, obs, act, rew, val, logp):
         """
@@ -61,7 +69,7 @@ class OnPolicyBuffer:
         rews = np.append(self.rew_buf[path_slice], last_val)
         vals = np.append(self.val_buf[path_slice], last_val)
 
-        self.adv_buf[path_slice], self.ret_buf[path_slice] = self.get_adv_ret(self, rews, vals)
+        self.adv_buf[path_slice], self.ret_buf[path_slice] = self.get_advantage(rews, vals)
         self.path_start_idx = self.ptr
 
     def get(self):
@@ -73,6 +81,7 @@ class OnPolicyBuffer:
         assert self.ptr == self.max_size    # buffer has to be full before you can get
         self.ptr, self.path_start_idx = 0, 0
         # advantage normalization trick
+        print(self.adv_buf)
         adv_mean, adv_std = self.adv_buf.mean(), self.adv_buf.std()
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
 
@@ -98,12 +107,14 @@ def discount_cumsum(x, discount):
          x1 + discount * x2,
          x2]
     """
-    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
+    return lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
 
 class GAE_Buffer(OnPolicyBuffer):
     def __init__(self, obs_dim, act_dim, size, gamma, lam):
         super().__init__(obs_dim, act_dim, size)
+        self.gamma = gamma
+        self.lam = lam
 
     def get_advantage(self, rews, vals):
         # the next two lines implement GAE-Lambda advantage calculation
