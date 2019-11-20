@@ -31,7 +31,7 @@ class ExperimentRunner:
         for i in range(len(self.buff)):
             act, log_prob, val = self.agent.act_stochastic(obs)
             action = act.numpy() if self.continuous else np.argmax(act.numpy())
-            print(log_prob)
+            # print(log_prob)
             obs, rew, new, _ = self.env.step(action)
 
             self.buff.store(obs, act, rew, val, log_prob)

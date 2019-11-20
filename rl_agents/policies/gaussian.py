@@ -9,7 +9,7 @@ class ContinuousSample(kl.Layer):
         super(ContinuousSample, self).__init__(name='ContinuousSample')
 
         # s_init = tf.constant_initializer(np.exp(log_std))
-        log_std = -0.53 * np.ones(action_dim, dtype=np.float64)
+        log_std = -0.53 * np.ones(action_dim, dtype=np.float32)
         self.std = tf.Variable(initial_value=np.exp(log_std),
                                name='std', trainable=True)
 
@@ -21,6 +21,7 @@ class ContinuousSample(kl.Layer):
 
         pi = dist.sample()
         logp_pi = dist.log_prob(pi)
+        logp_pi = tf.reduce_sum(logp_pi, axis=1)
 
         return pi, logp_pi, dist, inputs
 
