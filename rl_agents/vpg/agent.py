@@ -17,9 +17,12 @@ class VPG_Agent:
         self.MSE = tf.keras.losses.MeanSquaredError()
 
 
-    @tf.function
+    # @tf.function
     def act_stochastic(self, obs):
         pi, logp_pi, dist, loc = self.actor(obs[None])
+        print('pi', pi)
+        print('logp pi', logp_pi)
+        print('loc', loc)
         value = self.critic(obs[None])
 
         return pi[0], logp_pi[0], value[0]

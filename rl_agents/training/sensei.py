@@ -2,18 +2,19 @@ import tensorflow as tf
 import numpy as np
 import datetime
 from os import path
+from gym.spaces import Box, Discrete
 
 class ExperimentRunner:
     def __init__(self, agent, env, buff):
         self.agent = agent
         self.env = env
+        self.continuous = isinstance(env.action_space, Box)
         self.buff = buff
         self.num_ite = 0
 
         self.ite = 0
 
         self.last_obs = None
-        self.one_new = False
 
     def __iter__(self):
         return self
@@ -25,24 +26,26 @@ class ExperimentRunner:
             obs = self.last_obs
         else:
             self.ite = 0
-            self.one_new = False
             raise StopIteration
 
         for i in range(len(self.buff)):
             act, log_prob, val = self.agent.act_stochastic(obs)
-            obs, rew, new, _ = self.env.step(act.numpy())
+            action = act.numpy() if self.continuous else np.argmax(act.numpy())
+            print(log_prob)
+            obs, rew, new, _ = self.env.step(action)
 
             self.buff.store(obs, act, rew, val, log_prob)
 
             if new:
-                self.one_new = True
                 _, _, last_val = self.agent.act_stochastic(obs)
-                self.buff.finish_path(last_val)
+                self.buff.finish_path(last_val.numpy()[0])
 
+                # print('newww', i)
                 obs = self.env.reset()
                 new = False
 
-        if not self.one_new:
+        # finish path if the episode is not over yet
+        if not new:
             self.buff.finish_path()
 
         self.ite += 1

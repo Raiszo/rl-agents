@@ -3,7 +3,8 @@ import numpy as np
 from scipy.signal import lfilter
 
 def combined_shape(length, shape=None):
-    # return (length, shape) 
+    # return (length, shape)
+    # deprecated Conditional
     if shape is None:
         return (length,)
     return (length, shape) if np.isscalar(shape) else (length, *shape)
@@ -69,6 +70,7 @@ class OnPolicyBuffer:
         rews = np.append(self.rew_buf[path_slice], last_val)
         vals = np.append(self.val_buf[path_slice], last_val)
 
+        # print('path slice', path_slice)
         self.adv_buf[path_slice], self.ret_buf[path_slice] = self.get_advantage(rews, vals)
         self.path_start_idx = self.ptr
 
@@ -81,7 +83,7 @@ class OnPolicyBuffer:
         assert self.ptr == self.max_size    # buffer has to be full before you can get
         self.ptr, self.path_start_idx = 0, 0
         # advantage normalization trick
-        print(self.adv_buf)
+        # print(self.adv_buf)
         adv_mean, adv_std = self.adv_buf.mean(), self.adv_buf.std()
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
 

@@ -13,7 +13,7 @@ class CategoricalSample(kl.Layer):
 
         pi = dist.sample()
         logp_pi = dist.log_prob(pi)
-        pi = tf.argmax(pi, axis=1)
+        # pi = tf.argmax(pi, axis=1)
 
         return pi, logp_pi, dist, pi
 

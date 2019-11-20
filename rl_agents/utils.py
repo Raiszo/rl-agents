@@ -9,7 +9,7 @@ def get_actor_critic(env):
     env_as = env.action_space
 
     if isinstance(env_as, Box):
-        act_out_dim = env_as.shape.as_list()[-1]
+        act_out_dim = env_as.shape[-1]
         actor = GaussianActor(obs_dim, act_out_dim)
     elif isinstance(env_as, Discrete):
         act_out_dim = env_as.n
