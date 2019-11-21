@@ -12,6 +12,8 @@ class ExperimentRunner:
         self.buff = buff
         self.num_ite = 0
 
+        self.cur_ep_ret = 0
+        self.ep_rets = []
         self.ite = 0
 
         self.last_obs = None
@@ -33,6 +35,7 @@ class ExperimentRunner:
             action = act.numpy() if self.continuous else np.argmax(act.numpy())
             # print(log_prob)
             obs, rew, new, _ = self.env.step(action)
+            self.cur_ep_ret += rew
 
             self.buff.store(obs, act, rew, val, log_prob)
 
@@ -40,9 +43,12 @@ class ExperimentRunner:
                 _, _, last_val = self.agent.act_stochastic(obs)
                 self.buff.finish_path(last_val.numpy()[0])
 
+                self.ep_rets.append(self.cur_ep_ret)
+
                 # print('newww', i)
                 obs = self.env.reset()
                 new = False
+                self.cur_ep_ret = 0
 
         # finish path if the episode is not over yet
         if not new:
@@ -50,8 +56,10 @@ class ExperimentRunner:
 
         self.ite += 1
         self.last_obs = obs
+        ep_rets = self.ep_rets
+        self.ep_rets = []
 
-        return self.buff.get()
+        return self.buff.get(ep_rets)
 
 class Sensei:
     def __init__(self, agent, alg_name, env_fn, buff,
@@ -90,7 +98,6 @@ class Sensei:
             if record:
                 with self.summary_writer.as_default():
                     tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
-                    tf.summary.scalar('value loss', v_loss, step=i)
 
                 log_dir = self.log_dir
                 # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )

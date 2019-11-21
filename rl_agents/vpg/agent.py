@@ -17,7 +17,7 @@ class VPG_Agent:
         self.MSE = tf.keras.losses.MeanSquaredError()
 
 
-    # @tf.function
+    @tf.function
     def act_stochastic(self, obs):
         pi, logp_pi, dist, loc = self.actor(obs[None])
         # print('pi', pi)
@@ -44,7 +44,8 @@ class VPG_Agent:
             logp_ac_n = tf.reduce_sum(dist.log_prob(ac_na), axis=1)
 
             pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
-            ent_loss = tf.reduce_mean(dist.entropy())
+            # ent_loss = tf.reduce_mean(dist.entropy())
+            # print(ent_loss)
             # if self.is_continuous:
             #     ent_loss = tf.reduce_mean(dist.entropy())
             # else:
@@ -54,7 +55,8 @@ class VPG_Agent:
             # tf.print('logp', logp_ac_n[:10])
             # tf.print('adv', adv_n.shape)
 
-            loss = - pg_loss - 0.01*ent_loss
+            # loss = - pg_loss - 0.01*ent_loss
+            loss = - pg_loss
 
         tvars = self.actor.trainable_variables
         grad = tape.gradient(loss, tvars)
@@ -63,6 +65,8 @@ class VPG_Agent:
 
     @tf.function
     def critic_step(self, obs_no, tval_n):
+        # print(obs_no.dtype)
+        # print(tval_n.dtype)
         with tf.GradientTape() as tape:
             pval_n = self.critic(obs_no)
             pval_n = tf.squeeze(pval_n)
@@ -83,17 +87,24 @@ class VPG_Agent:
         self.critic_opt.apply_gradients(zip(grad, tvars))
    
 
-    def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
+    def run_ite(self, obs_no, ac_na, log_prob_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size=64):
         size = len(obs_no)
         train_indicies = np.arange(size)
 
-        if not self.is_continuous:
-            acs = np.zeros((size, self.act_dim))
-            acs[np.arange(size), ac_na] = 1
-            ac_na = acs
+        # if not self.is_continuous:
+        #     acs = np.zeros((size, self.act_dim))
+        #     acs[np.arange(size), ac_na] = 1
+        #     ac_na = acs
 
-        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_na, adv_n))
+        # print('++++++')
+        # print(obs_no.shape)
+        # print(ac_na.shape)
+        # print(log_prob_n.shape)
+        # print(adv_n.shape)
+        # print('++++++')
+
+        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_n, adv_n))
         act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs_actor)
 
         crt_ds = tf.data.Dataset.from_tensor_slices((obs_no, t_val_n))

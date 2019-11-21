@@ -74,7 +74,7 @@ class OnPolicyBuffer:
         self.adv_buf[path_slice], self.ret_buf[path_slice] = self.get_advantage(rews, vals)
         self.path_start_idx = self.ptr
 
-    def get(self):
+    def get(self, ep_rets):
         """
         Call this at the end of an epoch to get all of the data from
         the buffer, with advantages appropriately normalized (shifted to have
@@ -94,6 +94,7 @@ class OnPolicyBuffer:
             "logp": self.logp_buf,
             "ret": self.ret_buf,
             "val": self.val_buf,
+            "ep_rets": ep_rets,
         }
 
 def discount_cumsum(x, discount):

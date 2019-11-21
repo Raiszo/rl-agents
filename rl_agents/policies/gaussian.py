@@ -20,7 +20,11 @@ class ContinuousSample(kl.Layer):
         dist = distributions.Normal(loc=inputs, scale=self.std)
 
         pi = dist.sample()
+        # this usually outputs an [N x act_dim] tensor,
+        # thus one log prob per gaussian distribution mean/std
+        # One needs just a single log prob value [Nx1] tensor
         logp_pi = dist.log_prob(pi)
+        # https://www.reddit.com/r/reinforcementlearning/comments/bs1xw8/multi_dimensional_continuous_action_space/
         logp_pi = tf.reduce_sum(logp_pi, axis=1)
 
         return pi, logp_pi, dist, inputs
