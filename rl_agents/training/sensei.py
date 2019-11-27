@@ -85,7 +85,7 @@ class Sensei:
         self.log_dir = path.join(self.log_dir, folder_name, current_time)
         self.summary_writer = tf.summary.create_file_writer(self.log_dir)
     
-    def train(self, num_ite, record=True, batch_size=64) -> None:
+    def train(self, num_ite, record=True, batch_size=64):
         # Set experiment_runner's iterations to run
         self.experiment_runner.num_ite = num_ite
 
@@ -97,6 +97,7 @@ class Sensei:
 
             if record:
                 with self.summary_writer.as_default():
+                    print(np.array(rollout["ep_rets"]).mean())
                     tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
 
                 log_dir = self.log_dir

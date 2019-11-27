@@ -1,5 +1,6 @@
-numpy
-gym
-tensorflow==2.0.0-rc0
-tensorflow-probability==0.8.0rc0
-gast==0.2.2
+tensorflow
+tensorflow-probability
+gym[box2d]
+jupyter
+tensorboard
+

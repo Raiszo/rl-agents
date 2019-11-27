@@ -2,19 +2,21 @@ import tensorflow as tf
 from math import ceil
 import numpy as np
 
+from rl_agents.policies.gaussian import GaussianActor
+
 class VPG_Agent:
     def __init__(self, actor, critic, act_dim, # just pass the env
                  learning_rate=3e-4, ac_lr=3e-4, cr_lr=1e-3):
         self.actor = actor
         self.critic = critic
+        self.use_entropy = isinstance(actor, GaussianActor)
+
 
         # self.is_continuous = is_continuous # change this too
         self.act_dim = act_dim  # TODO change this
 
-        self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
-        self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
-        self.opt = tf.keras.optimizers.Adam(ac_lr)
-        self.MSE = tf.keras.losses.MeanSquaredError()
+        # self.opt = tf.keras.optimizers.Adam(ac_lr)
+        # self.MSE = tf.keras.losses.MeanSquaredError()
 
 
     @tf.function
@@ -41,13 +43,20 @@ class VPG_Agent:
             # Maybe should add arg trainning=True
             pi, logp_pi, dist, locs = self.actor(obs_no)
             # Log probs for action dim > 1 are the sum of the result from dist.log_prob
-            logp_ac_n = tf.reduce_sum(dist.log_prob(ac_na), axis=1)
+
+            logp = dist.log_prob(ac_na)
+            if len(logp.shape) > 1:
+                logp_ac_n = tf.reduce_sum(logp, axis=1)
+            else:
+                logp_ac_n = logp
+                
 
             pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
             # ent_loss = tf.reduce_mean(dist.entropy())
             # print(ent_loss)
+            # print(ent_loss)
             # if self.is_continuous:
-            #     ent_loss = tf.reduce_mean(dist.entropy())
+            #     
             # else:
             #     ent_loss = 0.0
 
@@ -55,8 +64,12 @@ class VPG_Agent:
             # tf.print('logp', logp_ac_n[:10])
             # tf.print('adv', adv_n.shape)
 
-            # loss = - pg_loss - 0.01*ent_loss
-            loss = - pg_loss
+            if self.use_entropy:
+                ent_loss = tf.reduce_mean(dist.entropy())
+            else:
+                ent_loss = 0.0
+
+            loss = - pg_loss - 0.01*ent_loss
 
         tvars = self.actor.trainable_variables
         grad = tape.gradient(loss, tvars)
@@ -85,7 +98,10 @@ class VPG_Agent:
         tvars = self.critic.trainable_variables
         grad = tape.gradient(loss, tvars)
         self.critic_opt.apply_gradients(zip(grad, tvars))
-   
+
+    def setup_training(self, ac_lr, cr_lr):
+        self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
+        self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
 
     def run_ite(self, obs_no, ac_na, log_prob_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size=64):
