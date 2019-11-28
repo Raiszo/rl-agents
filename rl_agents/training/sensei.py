@@ -12,7 +12,6 @@ class ExperimentRunner:
         self.buff = buff
         self.num_ite = 0
 
-        self.cur_ep_ret = 0
         self.ep_rets = []
         self.ite = 0
 
@@ -24,30 +23,33 @@ class ExperimentRunner:
     def __next__(self):
         if self.ite == 0:
             obs = self.env.reset()
+            self.cur_ep_ret = 0
         elif self.ite > 0 and self.ite < self.num_ite:
             obs = self.last_obs
         else:
             self.ite = 0
             raise StopIteration
 
+        ep_rets = []
         for i in range(len(self.buff)):
             act, log_prob, val = self.agent.act_stochastic(obs)
             action = act.numpy() if self.continuous else np.argmax(act.numpy())
             # print(log_prob)
             obs, rew, new, _ = self.env.step(action)
+            print(rew)
             self.cur_ep_ret += rew
 
             self.buff.store(obs, act, rew, val, log_prob)
 
             if new:
+                print('new')
                 _, _, last_val = self.agent.act_stochastic(obs)
                 self.buff.finish_path(last_val.numpy()[0])
 
-                self.ep_rets.append(self.cur_ep_ret)
+                ep_rets.append(self.cur_ep_ret)
 
                 # print('newww', i)
                 obs = self.env.reset()
-                new = False
                 self.cur_ep_ret = 0
 
         # finish path if the episode is not over yet
@@ -56,8 +58,8 @@ class ExperimentRunner:
 
         self.ite += 1
         self.last_obs = obs
-        ep_rets = self.ep_rets
-        self.ep_rets = []
+        print(ep_rets)
+        ep_rets = np.array(ep_rets)
 
         return self.buff.get(ep_rets)
 
@@ -85,7 +87,8 @@ class Sensei:
         self.log_dir = path.join(self.log_dir, folder_name, current_time)
         self.summary_writer = tf.summary.create_file_writer(self.log_dir)
     
-    def train(self, num_ite, record=True, batch_size=64):
+    def train(self, num_ite, agent_kwargs, record=True, batch_size=64):
+        self.agent.setup_training(**agent_kwargs)
         # Set experiment_runner's iterations to run
         self.experiment_runner.num_ite = num_ite
 
@@ -97,8 +100,9 @@ class Sensei:
 
             if record:
                 with self.summary_writer.as_default():
-                    print(np.array(rollout["ep_rets"]).mean())
-                    tf.summary.scalar('reward mean', np.array(rollout["ep_rets"]).mean(), step=i)
+                    if len(rollout["ep_rets"]) > 0:
+                        print(i, rollout["ep_rets"].mean())
+                        tf.summary.scalar('reward mean', rollout["ep_rets"].mean(), step=i)
 
                 log_dir = self.log_dir
                 # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )

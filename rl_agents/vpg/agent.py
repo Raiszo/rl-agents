@@ -5,8 +5,7 @@ import numpy as np
 from rl_agents.policies.gaussian import GaussianActor
 
 class VPG_Agent:
-    def __init__(self, actor, critic, act_dim, # just pass the env
-                 learning_rate=3e-4, ac_lr=3e-4, cr_lr=1e-3):
+    def __init__(self, actor, critic, act_dim):
         self.actor = actor
         self.critic = critic
         self.use_entropy = isinstance(actor, GaussianActor)
@@ -99,9 +98,9 @@ class VPG_Agent:
         grad = tape.gradient(loss, tvars)
         self.critic_opt.apply_gradients(zip(grad, tvars))
 
-    def setup_training(self, ac_lr, cr_lr):
-        self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
-        self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
+    def setup_training(self, actor_lr, critic_lr):
+        self.actor_opt = tf.keras.optimizers.Adam(actor_lr)
+        self.critic_opt = tf.keras.optimizers.Adam(critic_lr)
 
     def run_ite(self, obs_no, ac_na, log_prob_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size=64):
