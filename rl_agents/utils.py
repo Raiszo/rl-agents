@@ -1,3 +1,4 @@
+import numpy as np
 from gym.spaces import Box, Discrete
 
 from rl_agents.policies.categorical import CategoricalActor
@@ -20,3 +21,16 @@ def get_actor_critic(env):
     critic = Critic(obs_dim)
 
     return actor, critic
+
+
+def simple_run(env, agent):
+    continuous = isinstance(env.action_space, Box)
+
+    obs = env.reset()
+    done = False
+    while not done:
+        act, log_prob, val = agent.act_stochastic(obs)
+        action = act.numpy() if continuous else np.argmax(act.numpy())
+
+        obs, rew, done, _ = env.step(action)
+        print('rew', rew)

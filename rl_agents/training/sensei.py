@@ -36,13 +36,13 @@ class ExperimentRunner:
             action = act.numpy() if self.continuous else np.argmax(act.numpy())
             # print(log_prob)
             obs, rew, new, _ = self.env.step(action)
-            print(rew)
+            # print(rew)
             self.cur_ep_ret += rew
 
             self.buff.store(obs, act, rew, val, log_prob)
 
             if new:
-                print('new')
+                # print('new')
                 _, _, last_val = self.agent.act_stochastic(obs)
                 self.buff.finish_path(last_val.numpy()[0])
 
@@ -58,7 +58,7 @@ class ExperimentRunner:
 
         self.ite += 1
         self.last_obs = obs
-        print(ep_rets)
+        # print(ep_rets)
         ep_rets = np.array(ep_rets)
 
         return self.buff.get(ep_rets)
