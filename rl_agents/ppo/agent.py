@@ -2,19 +2,20 @@ import tensorflow as tf
 from math import ceil
 import numpy as np
 
+from rl_agents.policies.gaussian import GaussianActor
+
 class PPO_Agent:
-    def __init__(self, actor, critic, is_continuous, act_dim,
+    def __init__(self, actor, critic, act_dim,
                  epsilon=0.2, ac_lr=3e-4, cr_lr=1e-3):
         self.actor = actor
         self.critic = critic
+        self.use_entropy = isinstance(actor, GaussianActor)
 
-        self.is_continuous = is_continuous
         self.act_dim = act_dim
         self.epsilon = epsilon
 
         self.actor_opt = tf.keras.optimizers.Adam(ac_lr)
         self.critic_opt = tf.keras.optimizers.Adam(cr_lr)
-        self.opt = tf.keras.optimizers.Adam(ac_lr)
 
         # self.reward_metric = tf.keras.metrics.Mean('reward', dtype=tf.float64)
 
@@ -29,13 +30,13 @@ class PPO_Agent:
     @tf.function
     def act_deterministic(self, obs):
         _, _, _, loc = self.actor(obs[None])
-        value = self.critic(obs[None])
+        # value = self.critic(obs[None])
 
-        return loc[0], value[0]
+        return loc[0]
         
 
-    def surrogate_loss(self, new_logp_pi, old_logp_pi, advs):
-        diff = new_logp_pi - old_logp_pi
+    def surrogate_loss(self, new_logp, old_logp, advs):
+        diff = new_logp - old_logp
         ratio = tf.exp(diff)
 
         clipped_ratio = tf.clip_by_value(ratio,
@@ -47,19 +48,20 @@ class PPO_Agent:
 
 
     @tf.function
-    def actor_step(self, obs_no, ac_na, old_log_prob_na, adv_n):
+    def actor_step(self, obs_no, ac_na, old_logp_n, adv_n):
         with tf.GradientTape() as tape:
             # Compute new log probs
             _, _, dist, _ = self.actor(obs_no)
-            new_log_prob_na = dist.log_prob(ac_na)
 
-            # Compute surrogate loss
-            surr_loss = self.surrogate_loss(new_log_prob_na, old_log_prob_na, adv_n)
-            # Can only calculate a valid entropy for gaussian distribution
-            if self.is_continuous:
-                ent_loss = tf.reduce_mean(dist.entropy())
+            logp = dist.log_prob(ac_na)
+            if len(logp.shape) > 1:
+                new_logp_n = tf.reduce_sum(logp, axis=1)
             else:
-                ent_loss = 0.0
+                new_logp_n = logp
+
+
+            surr_loss = self.surrogate_loss(new_logp_n, old_logp_n, adv_n)
+            ent_loss = tf.reduce_mean(dist.entropy()) if self.use_entropy else 0.0
 
             loss = surr_loss - 0.01*ent_loss
 

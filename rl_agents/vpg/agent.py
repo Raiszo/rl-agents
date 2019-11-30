@@ -5,17 +5,16 @@ import numpy as np
 from rl_agents.policies.gaussian import GaussianActor
 
 class VPG_Agent:
-    def __init__(self, actor, critic, act_dim):
+    def __init__(self, actor, critic, act_dim,
+                 actor_lr=3e-4, critic_lr=1e-3):
         self.actor = actor
         self.critic = critic
         self.use_entropy = isinstance(actor, GaussianActor)
 
-
-        # self.is_continuous = is_continuous # change this too
         self.act_dim = act_dim  # TODO change this
 
-        # self.opt = tf.keras.optimizers.Adam(ac_lr)
-        # self.MSE = tf.keras.losses.MeanSquaredError()
+        self.actor_opt = tf.keras.optimizers.Adam(actor_lr)
+        self.critic_opt = tf.keras.optimizers.Adam(critic_lr)
 
 
     @tf.function
@@ -41,8 +40,8 @@ class VPG_Agent:
         with tf.GradientTape() as tape:
             # Maybe should add arg trainning=True
             pi, logp_pi, dist, locs = self.actor(obs_no)
-            # Log probs for action dim > 1 are the sum of the result from dist.log_prob
 
+            # Log probs for action dim > 1 are the sum of the result from dist.log_prob
             logp = dist.log_prob(ac_na)
             if len(logp.shape) > 1:
                 logp_ac_n = tf.reduce_sum(logp, axis=1)
@@ -63,16 +62,12 @@ class VPG_Agent:
             # tf.print('logp', logp_ac_n[:10])
             # tf.print('adv', adv_n.shape)
 
-            if self.use_entropy:
-                ent_loss = tf.reduce_mean(dist.entropy())
-            else:
-                ent_loss = 0.0
+            ent_loss = tf.reduce_mean(dist.entropy()) if self.use_entropy else 0.0
 
             loss = - pg_loss - 0.01*ent_loss
 
-        tvars = self.actor.trainable_variables
-        grad = tape.gradient(loss, tvars)
-        self.actor_opt.apply_gradients(zip(grad, tvars)) 
+        grad = tape.gradient(loss, self.actor.trainable_variables)
+        self.actor_opt.apply_gradients(zip(grad, self.actor.trainable_variables))
         
 
     @tf.function
@@ -97,10 +92,6 @@ class VPG_Agent:
         tvars = self.critic.trainable_variables
         grad = tape.gradient(loss, tvars)
         self.critic_opt.apply_gradients(zip(grad, tvars))
-
-    def setup_training(self, actor_lr, critic_lr):
-        self.actor_opt = tf.keras.optimizers.Adam(actor_lr)
-        self.critic_opt = tf.keras.optimizers.Adam(critic_lr)
 
     def run_ite(self, obs_no, ac_na, log_prob_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size=64):

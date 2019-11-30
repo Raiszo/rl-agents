@@ -87,8 +87,8 @@ class Sensei:
         self.log_dir = path.join(self.log_dir, folder_name, current_time)
         self.summary_writer = tf.summary.create_file_writer(self.log_dir)
     
-    def train(self, num_ite, agent_kwargs, record=True, batch_size=64):
-        self.agent.setup_training(**agent_kwargs)
+    def train(self, num_ite, record=True, batch_size=64):
+        # self.agent.setup_training(**agent_kwargs)
         # Set experiment_runner's iterations to run
         self.experiment_runner.num_ite = num_ite
 
