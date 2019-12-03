@@ -7,6 +7,7 @@ from rl_agents.policies.gaussian import GaussianActor
 class VPG_Agent:
     def __init__(self, actor, critic, act_dim,
                  actor_lr=3e-4, critic_lr=1e-3):
+        self.name = 'VPG'
         self.actor = actor
         self.critic = critic
         self.use_entropy = isinstance(actor, GaussianActor)
@@ -89,20 +90,11 @@ class VPG_Agent:
             # )
             # tf.print('loss', loss)
 
-        tvars = self.critic.trainable_variables
-        grad = tape.gradient(loss, tvars)
-        self.critic_opt.apply_gradients(zip(grad, tvars))
+        grad = tape.gradient(loss, self.critic.trainable_variables)
+        self.critic_opt.apply_gradients(zip(grad, self.critic.trainable_variables))
 
-    def run_ite(self, obs_no, ac_na, log_prob_n, t_val_n, adv_n,
-                epochs_actor, epochs_critic, batch_size=64):
-        size = len(obs_no)
-        train_indicies = np.arange(size)
-
-        # if not self.is_continuous:
-        #     acs = np.zeros((size, self.act_dim))
-        #     acs[np.arange(size), ac_na] = 1
-        #     ac_na = acs
-
+    def run_ite(self, obs_no, ac_na, logp_n, t_val_n, adv_n,
+                epochs_actor, epochs_critic, batch_size):
         # print('++++++')
         # print(obs_no.shape)
         # print(ac_na.shape)
@@ -110,13 +102,13 @@ class VPG_Agent:
         # print(adv_n.shape)
         # print('++++++')
 
-        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_n, adv_n))
+        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, adv_n))
         act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs_actor)
 
         crt_ds = tf.data.Dataset.from_tensor_slices((obs_no, t_val_n))
         crt_ds = crt_ds.shuffle(512).batch(batch_size).repeat(epochs_critic)
 
-        for obs, ac, logp, adv in act_ds:
+        for obs, ac, adv in act_ds:
             self.actor_step(obs, ac, adv)
 
         for obs, t_val in crt_ds:

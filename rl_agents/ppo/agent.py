@@ -7,6 +7,7 @@ from rl_agents.policies.gaussian import GaussianActor
 class PPO_Agent:
     def __init__(self, actor, critic, act_dim,
                  epsilon=0.2, ac_lr=3e-4, cr_lr=1e-3):
+        self.name = 'PPO'
         self.actor = actor
         self.critic = critic
         self.use_entropy = isinstance(actor, GaussianActor)
@@ -35,20 +36,20 @@ class PPO_Agent:
         return loc[0]
         
 
-    def surrogate_loss(self, new_logp, old_logp, advs):
+    def surrogate_loss(self, new_logp, old_logp, adv):
         diff = new_logp - old_logp
         ratio = tf.exp(diff)
 
         clipped_ratio = tf.clip_by_value(ratio,
                                          1.0 - self.epsilon,
                                          1.0 + self.epsilon)
-        surrogate_min = tf.minimum(ratio*advs, clipped_ratio*advs)
+        surrogate_min = tf.minimum(ratio*adv, clipped_ratio*adv)
 
-        return - tf.reduce_mean(surrogate_min)
+        return tf.reduce_mean(surrogate_min)
 
 
     @tf.function
-    def actor_step(self, obs_no, ac_na, old_logp_n, adv_n):
+    def actor_step(self, obs_no, ac_na, adv_n, old_logp_n):
         with tf.GradientTape() as tape:
             # Compute new log probs
             _, _, dist, _ = self.actor(obs_no)
@@ -73,23 +74,17 @@ class PPO_Agent:
     def critic_step(self, obs_no, tval_n):
         with tf.GradientTape() as tape:
             pval_n = self.critic(obs_no)
-            loss = tf.reduce_mean((pval_n - tval_n)**2)
+            pval_n = tf.squeeze(pval_n)
+
+            loss = tf.reduce_mean((tval_n - pval_n)**2)
             loss = 0.5 * loss
 
         gradients = tape.gradient(loss, self.critic.trainable_variables)
         self.critic_opt.apply_gradients(zip(gradients, self.critic.trainable_variables))
     
 
-    def run_ite(self, obs_no, ac_na, log_prob_na, t_val_n, adv_n,
+    def run_ite(self, obs_no, ac_na, logp_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size):
-        size = len(obs_no)
-        train_indicies = np.arange(size)
-
-        if len(ac_na.shape) == 1:
-            acs = np.zeros((size, self.act_dim))
-            acs[np.arange(size), ac_na] = 1
-            ac_na = acs
-
         """
         Remember the old school way to do it: 
             for i in range(int(ceil(size/batch_size))):
@@ -99,14 +94,14 @@ class PPO_Agent:
         
         Train actor with inptus: obs, ac, logp, adv
         """
-        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, log_prob_na, adv_n))
+        act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, adv_n, logp_n))
         act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs_critic)
 
         crt_ds = tf.data.Dataset.from_tensor_slices((obs_no, t_val_n))
         crt_ds = crt_ds.shuffle(512).batch(batch_size).repeat(epochs_actor)
 
-        for obs, ac, logp, adv in act_ds:
-            self.actor_step(obs, ac, logp, adv)
+        for obs, ac, adv, logp in act_ds:
+            self.actor_step(obs, ac, adv, logp)
 
         for obs, t_val in crt_ds:
             self.critic_step(obs, t_val)

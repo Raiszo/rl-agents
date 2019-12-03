@@ -64,12 +64,12 @@ class ExperimentRunner:
         return self.buff.get(ep_rets)
 
 class Sensei:
-    def __init__(self, agent, alg_name, env_fn, buff,
+    def __init__(self, agent, env_fn, buff,
                  epochs_actor=20, epochs_critic=20,
                  gamma=0.99, gae_lambda=0.95,
                  log_dir='logs'):
         self.agent = agent
-        self.alg_name = alg_name
+        self.alg_name = agent.name
         self.env_fn = env_fn
         env = env_fn()
         self.experiment_runner = ExperimentRunner(agent, env, buff)
