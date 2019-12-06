@@ -70,13 +70,13 @@ class OnPolicyBuffer:
         rews = np.append(self.rew_buf[path_slice], last_val)
         vals = np.append(self.val_buf[path_slice], last_val)
 
-        print(path_slice)
-        print('rews', rews)
-        print('vals', vals)
+        # print(path_slice)
+        # print('rews', rews)
+        # print('vals', vals)
         # print('path slice', path_slice)
         self.adv_buf[path_slice], self.ret_buf[path_slice] = self.get_advantage(rews, vals)
-        print('ret+', self.ret_buf[path_slice])
-        print('adv+', self.adv_buf[path_slice])
+        # print('ret+', self.ret_buf[path_slice])
+        # print('adv+', self.adv_buf[path_slice])
         self.path_start_idx = self.ptr
 
     def get(self, ep_rets):
@@ -91,7 +91,7 @@ class OnPolicyBuffer:
         # print(self.adv_buf)
         adv_mean, adv_std = self.adv_buf.mean(), self.adv_buf.std()
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
-        print('get', self.adv_buf.mean(), self.adv_buf.std())
+        # print('get', self.adv_buf.mean(), self.adv_buf.std())
 
         return {
             "obs": self.obs_buf,
