@@ -1,5 +1,8 @@
 import numpy as np
+import tensorflow as tf
 from gym.spaces import Box, Discrete
+from os import path
+import datetime
 
 from rl_agents.policies.categorical import CategoricalActor
 from rl_agents.policies.gaussian import GaussianActor
@@ -34,3 +37,15 @@ def simple_run(env, agent):
 
         obs, rew, done, _ = env.step(action)
         print('rew', rew)
+
+
+class Logger:
+    def __init__(self, log_dir, base_path='logs'):
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+        self._dir = path.join(base_path, log_dir, current_time)
+        self.summary_writer = tf.summary.create_file_writer(self._dir)
+
+    def __call__(self):
+        return self._dir
+        

@@ -6,7 +6,7 @@ from rl_agents.policies.gaussian import GaussianActor
 
 class VPG_Agent:
     def __init__(self, actor, critic,
-                 actor_lr=3e-4, critic_lr=1e-3):
+                 actor_lr=3e-4, critic_lr=1e-3, logger=None):
         self.name = 'VPG'
         self.actor = actor
         self.critic = critic
@@ -14,6 +14,12 @@ class VPG_Agent:
 
         self.actor_opt = tf.keras.optimizers.Adam(actor_lr)
         self.critic_opt = tf.keras.optimizers.Adam(critic_lr)
+
+        self.logger = logger
+        if self.logger:
+            self.actor_loss = tf.keras.metrics.Mean('actor_loss', dtype=tf.float32)
+            self.critic_loss = tf.keras.metrics.Mean('critic_loss', dtype=tf.float32)
+            self.summary_writer = self.logger.summary_writer
 
 
     @tf.function
@@ -51,6 +57,9 @@ class VPG_Agent:
         grad = tape.gradient(loss, self.actor.trainable_variables)
         self.actor_opt.apply_gradients(zip(grad, self.actor.trainable_variables))
 
+        if self.logger:
+            self.actor_loss(loss)
+
         return loss
         
 
@@ -66,11 +75,14 @@ class VPG_Agent:
         grad = tape.gradient(loss, self.critic.trainable_variables)
         self.critic_opt.apply_gradients(zip(grad, self.critic.trainable_variables))
 
+        if self.logger:
+            self.critic_loss(loss)
+
         return loss
 
     @tf.function
     def run_ite(self, obs_no, ac_na, logp_n, t_val_n, adv_n,
-                epochs_actor, epochs_critic, batch_size):
+                epochs_actor, epochs_critic, batch_size, i):
 
         act_ds = tf.data.Dataset.from_tensor_slices((obs_no, ac_na, adv_n))
         act_ds = act_ds.shuffle(512).batch(batch_size).repeat(epochs_actor)
@@ -83,3 +95,11 @@ class VPG_Agent:
 
         for obs, t_val in crt_ds:
             self.critic_step(obs, t_val)
+
+        if self.logger:
+            with self.summary_writer.as_default():
+                tf.summary.scalar('actor_loss', self.actor_loss.result(), step=i)
+                tf.summary.scalar('critic_loss', self.critic_loss.result(), step=i)
+
+            self.actor_loss.reset_states()
+            self.critic_loss.reset_states()

@@ -1,7 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import datetime
-from os import path
 from gym.spaces import Box, Discrete
 
 class ExperimentRunner:
@@ -65,29 +63,21 @@ class ExperimentRunner:
 
 class Sensei:
     def __init__(self, agent, env_fn, buff,
-                 epochs_actor=20, epochs_critic=20,
-                 gamma=0.99, gae_lambda=0.95,
-                 log_dir='logs'):
+                 epochs_actor, epochs_critic,
+                 logger=None):
         self.agent = agent
         self.alg_name = agent.name
+        self.logger = logger
         self.env_fn = env_fn
         env = env_fn()
         self.experiment_runner = ExperimentRunner(agent, env, buff)
 
         self.epochs_actor = epochs_actor
         self.epochs_critic = epochs_critic
-        self.gamma = 0.99
-        self.gae_lambda = gae_lambda
 
-        self.log_dir = log_dir
-
-        folder_name = '{}_{}'.format(env.unwrapped.spec.id, self.alg_name)
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-
-        self.log_dir = path.join(self.log_dir, folder_name, current_time)
-        self.summary_writer = tf.summary.create_file_writer(self.log_dir)
+        self.summary_writer = self.logger.summary_writer
     
-    def train(self, num_ite, record=True, batch_size=64):
+    def train(self, num_ite, batch_size=64):
         # self.agent.setup_training(**agent_kwargs)
         # Set experiment_runner's iterations to run
         self.experiment_runner.num_ite = num_ite
@@ -96,16 +86,14 @@ class Sensei:
             self.agent.run_ite(rollout['obs'], rollout['act'], rollout['logp'],
                                rollout["ret"], rollout["adv"],
                                epochs_actor=self.epochs_actor, epochs_critic=self.epochs_critic,
-                               batch_size=batch_size)
+                               batch_size=batch_size, i=i)
 
-            if record:
+            if self.logger:
                 with self.summary_writer.as_default():
                     if len(rollout["ep_rets"]) > 0:
-                        print(i, rollout["ep_rets"].mean())
                         tf.summary.scalar('reward mean', rollout["ep_rets"].mean(), step=i)
 
-                log_dir = self.log_dir
-                # log_dir_fn = lambda log_dir, name, i: path.join(log_dir, )
+                log_dir = self.logger()
                 if i % 50 == 0 or i == num_ite-1:
                     self.agent.actor.save_weights(log_dir+'/_actor_'+str(i), save_format='tf')
                     self.agent.critic.save_weights(log_dir+'/_critic_'+str(i), save_format='tf')
