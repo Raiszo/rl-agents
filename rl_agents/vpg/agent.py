@@ -50,18 +50,16 @@ class VPG_Agent:
                 logp_ac_n = logp
                 
             pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
-            ent_loss = tf.reduce_mean(dist.entropy()) if self.use_entropy else 0.0
+            # ent_loss = tf.reduce_mean(dist.entropy()) if self.use_entropy else 0.0
 
-            loss = - pg_loss - 0.01*ent_loss
+            # loss = - pg_loss - 0.01*ent_loss
+            loss = - pg_loss
 
         grad = tape.gradient(loss, self.actor.trainable_variables)
         self.actor_opt.apply_gradients(zip(grad, self.actor.trainable_variables))
 
         if self.logger:
             self.actor_loss(loss)
-
-        return loss
-        
 
     @tf.function
     def critic_step(self, obs_no, tval_n):
@@ -78,9 +76,7 @@ class VPG_Agent:
         if self.logger:
             self.critic_loss(loss)
 
-        return loss
-
-    @tf.function
+    # @tf.function
     def run_ite(self, obs_no, ac_na, logp_n, t_val_n, adv_n,
                 epochs_actor, epochs_critic, batch_size, i):
 
