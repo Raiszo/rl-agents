@@ -48,12 +48,13 @@ class VPG_Agent:
                 logp_ac_n = tf.reduce_sum(logp, axis=1)
             else:
                 logp_ac_n = logp
-                
-            pg_loss = tf.reduce_mean(logp_ac_n * adv_n)
+
+            advantages = tf.stop_gradient(adv_n)
+            pg_loss = tf.reduce_mean(- logp_ac_n * advantages)
             # ent_loss = tf.reduce_mean(dist.entropy()) if self.use_entropy else 0.0
 
             # loss = - pg_loss - 0.01*ent_loss
-            loss = - pg_loss
+            loss = pg_loss
 
         grad = tape.gradient(loss, self.actor.trainable_variables)
         self.actor_opt.apply_gradients(zip(grad, self.actor.trainable_variables))
@@ -67,7 +68,7 @@ class VPG_Agent:
             pval_n = self.critic(obs_no)
             pval_n = tf.squeeze(pval_n)
 
-            loss = tf.reduce_mean((tval_n - pval_n)**2)
+            loss = tf.reduce_mean(tf.square(tval_n - pval_n))
             loss = 0.5 * loss
 
         grad = tape.gradient(loss, self.critic.trainable_variables)
