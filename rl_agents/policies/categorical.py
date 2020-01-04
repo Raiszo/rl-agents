@@ -15,7 +15,7 @@ class CategoricalSample(kl.Layer):
         logp_pi = dist.log_prob(pi)
         # pi = tf.argmax(pi, axis=1)
 
-        return pi, logp_pi, dist, pi
+        return pi, logp_pi, dist, inputs
 
 
 class CategoricalActor(tf.keras.Model):
