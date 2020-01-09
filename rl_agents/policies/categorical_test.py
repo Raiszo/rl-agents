@@ -18,12 +18,14 @@ class LayerTest(tf.test.TestCase):
         ]).astype(np.float32)
 
         pi, logp_pi, dist, inputs = self.layer(x)
-        # print(inputs, x)
 
-        self.assertShapeEqual(np.zeros((2,3)), pi) # should be 0s and 1s
+        self.assertShapeEqual(np.zeros((2,3)), pi)
         self.assertShapeEqual(np.zeros((2,)), logp_pi)
         self.assertIsInstance(dist, distributions.Multinomial)
-        # self.assertAllEqual(x, inputs)
+        self.assertAllEqual(inputs, x)
+
+        # test if one hot
+        self.assertAllEqual(tf.reduce_sum(pi, axis=1), np.ones(x.shape[0]))
 
 if __name__ == '__main__':
     tf.test.main()

@@ -22,7 +22,7 @@ class LayerTest(tf.test.TestCase):
         self.assertShapeEqual(np.zeros((2,3)), pi) # should be 0s and 1s
         self.assertShapeEqual(np.zeros((2,)), logp_pi)
         self.assertIsInstance(dist, distributions.Normal)
-        # self.assertAllEqual(x, inputs)
+        self.assertAllEqual(inputs, x)
 
 if __name__ == '__main__':
     tf.test.main()
