@@ -44,8 +44,10 @@ class GaussianSample(tf.keras.Layer):
         #return tfpd.Normal(loc=input, scale=tf.exp(self.log_std))
         return self.normal_dist(input)
 
-# get a nn model
 def get_policy(obs_dim: int, act_dim: int) -> tf.keras.Model:
+    """
+    Get an actor stochastic policy
+    """
     mlp_input = tf.keras.Input(shape=(obs_dim,), name='x')
     x = layers.Dense(32, activation='tanh', name='dense_1')(mlp_input)
     mlp_output = layers.Dense(act_dim, name='logits')(x)
