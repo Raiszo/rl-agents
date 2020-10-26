@@ -1,0 +1,10 @@
+#+TITLE: rl-agents
+A collection of RL agents in tensorflow 2.0
+
+* Usefull definitions
+** PPO
+   A good explanation of what this algorithm does is depicted in OpenAI's spinning up docs: "whose updates indirectly maximize performance, by instead maximizing a surrogate objective function which gives a conservative estimate for how much \(J(\pi_{\theta})\) will change as a result of the update"
+** On-policy algorithms
+   Each update only uses data colected while acting under the most recent version of the policy.
+** Off-policy algorithms
+   Each update can use data recorded at any point during trainning, regardless of how the agent was exploring the environment at that time.
