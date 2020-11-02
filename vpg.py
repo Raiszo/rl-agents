@@ -44,19 +44,20 @@ class GaussianSample(tf.keras.Layer):
         #return tfpd.Normal(loc=input, scale=tf.exp(self.log_std))
         return self.normal_dist(input)
 
-def get_policy(obs_dim: int, act_dim: int) -> tf.keras.Model:
+
+def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
     """
     Get an actor stochastic policy
     """
     mlp_input = tf.keras.Input(shape=(obs_dim,), name='x')
     x = layers.Dense(32, activation='tanh', name='dense_1')(mlp_input)
     mlp_output = layers.Dense(act_dim, name='logits')(x)
-    mlp = tf.keras.Model(inputs=mlp_input, outputs=mlp_output)
+    mlp = tf.keras.Model(mlp_input, mlp_output)
     mlp.summary()
 
     sampler_input = tf.keras.Input(shape=(act_dim,), name='logits')
     sampler_output = GaussianSample(sampler_input, name='sample')
-    sampler = tf.keras.Model(inputs=sampler_input, outputs=sampler_output)
+    sampler = tf.keras.Model(sampler_input, sampler_output)
     sampler.summary()
 
     observation = tf.keras.Input(shape=(obs_dim,), name='observation')
@@ -65,3 +66,18 @@ def get_policy(obs_dim: int, act_dim: int) -> tf.keras.Model:
     actor = tf.keras.Model(observation, action)
 
     return actor
+
+# Wrap OpenAI Gym's `env.step` call as an operation in a TensorFlow function.
+# This would allow it to be included in a callable TensorFlow graph.
+def env_step(action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    returns new state, reward, done
+    """
+    state, reward, done, _ = env.step(action)
+    return (state.astype(np.float32),
+            reward.astype(np.float32), # maybe discrete envs only get discrete rewards
+            np.array(done, np.int32))
+
+def tf_env_step(action: tf.Tensor) -> List(tf.Tensor):
+    return tf.numpy_function(env_step, [action],
+                             [tf.float32, tf.float32, tf.int32])
