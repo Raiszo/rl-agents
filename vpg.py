@@ -53,13 +53,13 @@ class GaussianSample(layers.Layer):
            shape=(input_shape[1],), trainable=True
        )
        self.normal_dist = tfpl.DistributionLambda(
-           make_distribution_fn=lambda t: tfpd.Normal(loc=t, scale=tf.exp(self.log_std)),
+           make_distribution_fn=lambda x_std: tfpd.Normal(loc=x_std[0], scale=x_std[1]),
            convert_to_tensor_fn=lambda s: s.sample(),
        )
 
     def call(self, input):
-        #return tfpd.Normal(loc=input, scale=tf.exp(self.log_std))
-        return self.normal_dist(input)
+        # better to pass the all values here, remember lambdas should be pure
+        return self.normal_dist((input, tf.exp(self.log_std)))
 
 def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
     """Get an actor stochastic policy"""
@@ -67,18 +67,18 @@ def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
     x = layers.Dense(32, activation='tanh', name='dense_1')(mlp_input)
     mlp_output = layers.Dense(act_dim, name='logits')(x)
     mlp = tf.keras.Model(mlp_input, mlp_output)
-    mlp.summary()
+    # mlp.summary()
 
     sampler_input = tf.keras.Input(shape=(act_dim,), name='logits')
     sampler_output = GaussianSample()(sampler_input)
     sampler = tf.keras.Model(sampler_input, sampler_output)
-    sampler.summary()
+    # sampler.summary()
 
     observation = tf.keras.Input(shape=(obs_dim,), name='observation')
     logits = mlp(observation)
     action = sampler(logits)
     actor = tf.keras.Model(observation, action)
-    actor.summary()
+    # actor.summary()
 
     return actor
 
@@ -88,7 +88,7 @@ def get_critic(obs_dim: int) -> tf.keras.Model:
     logits = layers.Dense(32, activation='tanh', name='dense_1')(observation)
     value = layers.Dense(1, activation='tanh', name='value')(logits)
     critic = tf.keras.Model(observation, value)
-    critic.summary()
+    # critic.summary()
 
     return critic
 
@@ -134,8 +134,10 @@ def run_rollout(
     values = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
     rewards = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 
+    # print('initial state')
     initial_state_shape = initial_state.shape
     state = initial_state
+    # state = initial_state
 
     for t in tf.range(max_steps):
         # Convert state into a batched tensor (batch size = 1)
@@ -156,7 +158,9 @@ def run_rollout(
         action_log_probs = action_log_probs.write(t, tf.squeeze(logp_n))
 
         # Apply action to the environment to get next state and reward
-        state, reward, done = env_step(action_na)
+        # be careful when squeezing, it may drop it to a single scaler if [1,1,1] :v
+        state, reward, done = env_step(tf.squeeze(action_na, axis=[0]))
+        # tf.ensure_shape(state, initial_state_shape)
         state.set_shape(initial_state_shape)
 
         # Store reward
@@ -169,6 +173,7 @@ def run_rollout(
     values = values.stack()
     rewards = rewards.stack()
 
+    # these are simple arrays
     return action_log_probs, values, rewards
 
 def get_expected_return(
@@ -188,6 +193,7 @@ def get_expected_return(
     for i in tf.range(n):
         reward = rewards[i]
         discounted_sum = reward + gamma * discounted_sum
+        # not sure about this one
         discounted_sum.set_shape(discounted_sum_shape)
         returns = returns.write(i, discounted_sum)
     returns = returns.stack()[::-1]
@@ -207,11 +213,9 @@ def compute_loss(
         returns_n: tf.Tensor) -> tf.Tensor:
     """Computes the combined actor-critic loss."""
 
-    advantage = returns_n - values_n
+    advantage_n = returns_n - values_n
 
-    action_log_probs_n = tf.math.log(action_log_probs_n)
-
-    actor_loss = -tf.math.reduce_sum(action_log_probs_n * advantage)
+    actor_loss = -tf.math.reduce_sum(action_log_probs_n * advantage_n)
 
     critic_loss = huber_loss(values_n, returns_n)
 
@@ -222,7 +226,7 @@ actor_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
 critic_opt = tf.keras.optimizers.Adam(learning_rate=3e-4)
 
 
-@tf.function
+# @tf.function
 def train_step(
         env: gym.Env,
         env_step: TFStep,
@@ -260,6 +264,7 @@ def train_step(
     critic_optimizer.apply_gradients(zip(critic_grads, critic.trainable_variables))
 
     episode_reward = tf.math.reduce_sum(rewards_n)
+    # print(actor.trainable_variables)
 
     return episode_reward
 
@@ -289,12 +294,15 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
 # Trainning loop
 #####
 
-max_episodes = 10000
+max_episodes = 1000
 max_steps_per_episode = 200
+# max_episodes = 1
+# max_steps_per_episode = 4
 
 # Pendulum-v0 is considered solved if average reward is >= 180 over 100
 # consecutive trials
-reward_threshold = 180
+# some benchmarks here: https://github.com/gouxiangchen/ac-ppo
+reward_threshold = -300
 running_reward = 0
 
 # Discount factor for future rewards
@@ -329,7 +337,10 @@ with tqdm.trange(max_episodes) as t:
         if i % 10 == 0:
             pass # print(f'Episode {i}: average reward: {avg_reward}')
 
-        if running_reward > reward_threshold:
+        # finish if running_reward is better than threshold and if
+        # episodes are greater than the running_window steps
+        # important the second part when working with negative rewards
+        if running_reward > reward_threshold and i >= 100:
             break
 
 print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
