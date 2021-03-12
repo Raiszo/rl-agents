@@ -1,4 +1,6 @@
 from typing import Any, List, Sequence, Tuple, Callable, NoReturn
+import datetime
+from os.path import join
 
 import tqdm
 import numpy as np
@@ -222,11 +224,12 @@ def compute_loss(
     return actor_loss + critic_loss
 
 
-actor_opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
-critic_opt = tf.keras.optimizers.Adam(learning_rate=3e-4)
+actor_opt = tf.keras.optimizers.Adam(learning_rate=1e-5)
+critic_opt = tf.keras.optimizers.Adam(learning_rate=3e-5)
 
 
-# @tf.function
+# this speeds like 15x, do not forget to add
+@tf.function
 def train_step(
         env: gym.Env,
         env_step: TFStep,
@@ -294,7 +297,10 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
 # Trainning loop
 #####
 
-max_episodes = 1000
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+writer = tf.summary.create_file_writer(join('logs', current_time))
+
+max_episodes = 5000
 max_steps_per_episode = 200
 # max_episodes = 1
 # max_steps_per_episode = 4
@@ -336,6 +342,9 @@ with tqdm.trange(max_episodes) as t:
         # Show average episode reward every 10 episodes
         if i % 10 == 0:
             pass # print(f'Episode {i}: average reward: {avg_reward}')
+
+        with writer.as_default():
+            tf.summary.scalar('epoch mean', episode_reward, i)
 
         # finish if running_reward is better than threshold and if
         # episodes are greater than the running_window steps
