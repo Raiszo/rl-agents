@@ -43,8 +43,8 @@ class GaussianSample(layers.Layer):
     Custom keras layer that implements a diagonal Gaussian distribution layer
     that stores the log_std
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def build(self, input_shape):
        """
@@ -52,6 +52,7 @@ class GaussianSample(layers.Layer):
        """
        self.log_std = self.add_weight(
            'log_std', initializer=tf.keras.initializers.Zeros(),
+           # 'log_std', initializer=tf.keras.initializers.Constant(-0.53),
            shape=(input_shape[1],), trainable=True
        )
        self.normal_dist = tfpl.DistributionLambda(
@@ -65,21 +66,13 @@ class GaussianSample(layers.Layer):
 
 def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
     """Get an actor stochastic policy"""
-    mlp_input = tf.keras.Input(shape=(obs_dim,), name='x')
-    x = layers.Dense(32, activation='tanh', name='dense_1')(mlp_input)
-    mlp_output = layers.Dense(act_dim, name='logits')(x)
-    mlp = tf.keras.Model(mlp_input, mlp_output)
-    # mlp.summary()
+    observation = tf.keras.Input(shape=(obs_dim,))
+    x = layers.Dense(64, activation='tanh')(observation)
+    x = layers.Dense(64, activation='tanh')(x)
+    logits = layers.Dense(act_dim, name='logits')(x)
+    distributions = GaussianSample(name='gaussian_sample')(logits)
 
-    sampler_input = tf.keras.Input(shape=(act_dim,), name='logits')
-    sampler_output = GaussianSample()(sampler_input)
-    sampler = tf.keras.Model(sampler_input, sampler_output)
-    # sampler.summary()
-
-    observation = tf.keras.Input(shape=(obs_dim,), name='observation')
-    logits = mlp(observation)
-    action = sampler(logits)
-    actor = tf.keras.Model(observation, action)
+    actor = tf.keras.Model(observation, distributions)
     # actor.summary()
 
     return actor
@@ -87,8 +80,10 @@ def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
 def get_critic(obs_dim: int) -> tf.keras.Model:
     """Get a critic that returns the expect value for the current state"""
     observation = tf.keras.Input(shape=(obs_dim,), name='observation')
-    logits = layers.Dense(32, activation='tanh', name='dense_1')(observation)
-    value = layers.Dense(1, activation='tanh', name='value')(logits)
+    x = layers.Dense(64, activation='tanh')(observation)
+    x = layers.Dense(64, activation='tanh')(x)
+    value = layers.Dense(1, name='value')(x)
+
     critic = tf.keras.Model(observation, value)
     # critic.summary()
 
