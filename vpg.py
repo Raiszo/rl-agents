@@ -216,6 +216,8 @@ def compute_loss(
     """Computes the combined actor-critic loss."""
 
     advantage_n = returns_n - values_n
+    advantage_n = ((advantage_n - tf.math.reduce_mean(advantage_n)) /
+                   (tf.math.reduce_std(advantage_n) + eps))
 
     actor_loss = -tf.math.reduce_sum(action_log_probs_n * advantage_n)
 
@@ -249,7 +251,7 @@ def train_step(
             env, env_step, initial_state, actor, critic, max_steps_per_episode)
 
         # Calculate expected returns
-        returns_n = get_expected_return(rewards_n, gamma)
+        returns_n = get_expected_return(rewards_n, gamma, standardize=False)
 
         # Convert training data to appropriate TF tensor shapes
         action_log_probs_n, values_n, returns_n = [
