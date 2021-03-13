@@ -294,61 +294,64 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
 # Trainning loop
 #####
 
-current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-writer = tf.summary.create_file_writer(join('logs', current_time))
+if __name__ == '__main__':
 
-max_episodes = 5000
-max_steps_per_episode = 200
-# max_episodes = 1
-# max_steps_per_episode = 4
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    writer = tf.summary.create_file_writer(join('logs', current_time))
 
-# Pendulum-v0 is considered solved if average reward is >= 180 over 100
-# consecutive trials
-# some benchmarks here: https://github.com/gouxiangchen/ac-ppo
-reward_threshold = -300
-running_reward = 0
+    max_episodes = 40000
+    max_steps_per_episode = 200
+    # max_episodes = 1
+    # max_steps_per_episode = 4
 
-# Discount factor for future rewards
-gamma = 0.99
+    # Pendulum-v0 is considered solved if average reward is >= 180 over 100
+    # consecutive trials
+    # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
+    reward_threshold = -300
+    running_reward = 0
 
-env = get_env('Pendulum-v0')
-env_step = get_env_step(env)
+    # Discount factor for future rewards
+    gamma = 0.99
 
-# Only for continuous obs & continuous act
-assert isinstance(env.observation_space, Box) and \
-    isinstance(env.action_space, Box)
+    env = get_env('Pendulum-v0')
+    env_step = get_env_step(env)
 
-obs_dim, act_dim = env.observation_space.shape[0], env.action_space.shape[0]
-actor = get_actor(obs_dim, act_dim)
-critic = get_critic(obs_dim)
+    # Only for continuous obs & continuous act
+    assert isinstance(env.observation_space, Box) and \
+        isinstance(env.action_space, Box)
 
-with tqdm.trange(max_episodes) as t:
-    for i in t:
-        initial_state = tf.constant(env.reset(), dtype=tf.float32)
-        episode_reward = int(train_step(
-            env, env_step, initial_state, actor, critic,
-            actor_optimizer=actor_opt, critic_optimizer=critic_opt,
-            gamma=gamma, max_steps_per_episode=max_steps_per_episode))
+    obs_dim, act_dim = env.observation_space.shape[0], env.action_space.shape[0]
+    actor = get_actor(obs_dim, act_dim)
+    critic = get_critic(obs_dim)
 
-        running_reward = episode_reward*0.01 + running_reward*.99
+    with tqdm.trange(max_episodes) as t:
+        for i in t:
+            initial_state = tf.constant(env.reset(), dtype=tf.float32)
+            episode_reward = int(train_step(
+                env, env_step, initial_state, actor, critic,
+                actor_optimizer=actor_opt, critic_optimizer=critic_opt,
+                gamma=gamma, max_steps_per_episode=max_steps_per_episode))
 
-        t.set_description(f'Episode {i}')
-        t.set_postfix(
-            episode_reward=episode_reward, running_reward=running_reward)
+            running_reward = episode_reward*0.01 + running_reward*.99
 
-        # Show average episode reward every 10 episodes
-        if i % 10 == 0:
-            pass # print(f'Episode {i}: average reward: {avg_reward}')
+            t.set_description(f'Episode {i}')
+            t.set_postfix(
+                episode_reward=episode_reward, running_reward=running_reward)
 
-        with writer.as_default():
-            tf.summary.scalar('epoch mean', episode_reward, i)
+            # Show average episode reward every 10 episodes
+            if i % 10 == 0:
+                pass # print(f'Episode {i}: average reward: {avg_reward}')
 
-        # finish if running_reward is better than threshold and if
-        # episodes are greater than the running_window steps
-        # important the second part when working with negative rewards
-        if running_reward > reward_threshold and i >= 100:
-            break
+            with writer.as_default():
+                tf.summary.scalar('log std', actor.get_layer('gaussian_sample').log_std[0], i)
+                tf.summary.scalar('epoch mean', episode_reward, i)
 
-print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
+            # finish if running_reward is better than threshold and if
+            # episodes are greater than the running_window steps
+            # important the second part when working with negative rewards
+            if running_reward > reward_threshold and i >= 100:
+                break
 
-render_episode(env, actor, 200)
+        print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
+
+        render_episode(env, actor, 200)
