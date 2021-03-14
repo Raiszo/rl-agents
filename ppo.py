@@ -33,9 +33,12 @@ def get_env(env_name: str = 'Pendulum-v0') -> gym.Env:
 # - DONE compute expected return
 # - DONE compute loss
 # - DONE trainning step
-# - trainning loop
-# - logging?
+# - DONE trainning loop
+# - DONE logging?
 # - model saving?
+# - rollout loop could restart and get more data
+# - minibatch traing
+# - multiple epochs
 
 
 class GaussianSample(layers.Layer):
@@ -51,8 +54,9 @@ class GaussianSample(layers.Layer):
        input_shape: might be [None, act_dim]
        """
        self.log_std = self.add_weight(
-           'log_std', initializer=tf.keras.initializers.Zeros(),
+           # 'log_std', initializer=tf.keras.initializers.Zeros(),
            # 'log_std', initializer=tf.keras.initializers.Constant(-0.53),
+           'log_std', initializer=tf.keras.initializers.Constant(0.4),
            shape=(input_shape[1],), trainable=True
        )
        self.normal_dist = tfpl.DistributionLambda(
@@ -233,23 +237,37 @@ def compute_loss(
     # doing the forward pass
     action_dists, values_n1 = actor(states_no), critic(states_no)
 
+    # print('compute loss')
+    # print(returns_n1, values_n1)
     adv_n1 = returns_n1 - values_n1
+    # print(adv_n1)
     adv_n1 = ((adv_n1 - tf.math.reduce_mean(adv_n1)) /
               (tf.math.reduce_std(adv_n1) + eps))
+    # print(adv_n1)
 
     # print(dists, actions_na, old_log_probs_n, states_no, values_n, returns_n)
     # print(old_log_probs_n1)
     # print(dists.log_prob(actions_na))
 
     # remember if action is countinuous and space > 1, need to sum the log_props
-    ratio_n = tf.exp(tf.reduce_mean(action_dists.log_prob(actions_na)) - old_log_probs_n1)
+    log_probs_n1 = tf.reduce_mean(action_dists.log_prob(actions_na), axis=1, keepdims=True)
+
+    # print(log_probs_n1, old_log_probs_n1)
+    # print(log_probs_n1 - old_log_probs_n1)
+    ratio_n = tf.exp(log_probs_n1 - old_log_probs_n1)
+    # print(ratio_n)
     clipped_ratio_n = tf.clip_by_value(ratio_n, 1.0 - epsilon, 1.0 + epsilon)
+    # print(clipped_ratio_n)
+
     surrogate_min = tf.minimum(ratio_n * adv_n1, clipped_ratio_n * adv_n1)
+    # print(surrogate_min)
     surrogate_min = tf.reduce_mean(surrogate_min)
+    # print(surrogate_min)
 
     # critic_loss = huber_loss(values_n1, returns_n1)
     critic_loss = mse_loss(returns_n1, values_n1)
     # print(critic_loss)
+    # print(tf.reduce_mean(action_dists.entropy()))
 
     return -surrogate_min + 0.5*critic_loss - 0.01*tf.reduce_mean(action_dists.entropy())
 
@@ -264,6 +282,8 @@ def train_step(
         actor_optimizer: tf.keras.optimizers.Optimizer,
         critic_optimizer: tf.keras.optimizers.Optimizer,
         gamma: float,
+        n_epochs: int,
+        minibatch_size: int,
         max_steps_per_episode: int) -> tf.Tensor:
     """Runs a model training step."""
 
@@ -278,20 +298,44 @@ def train_step(
     old_log_probs_n1, values_n1, returns_n1 = [
         tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n]]
 
-    # inside the tape actor & critic mus do a fordward computation
-    # this fordward pass was done before in the rollout function, but, since
-    # now the old_actor is the one running doing it, need to redo it inside compute_loss
-    with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-        # Calculating loss values to update our network
-        loss = compute_loss(actor, actions_na, states_no, old_log_probs_n1, returns_n1)
+    # get 2000 length data, messy
+    for i in range(9):
+        initial_state = tf.constant(env.reset(), dtype=tf.float32)
+        _old_log_probs_n, _values_n, _rewards_n, _states_no, _actions_na = run_rollout(
+            env, env_step, initial_state, old_actor, critic, max_steps_per_episode)
 
-    # Compute the gradients from the loss
-    actor_grads = act_tape.gradient(loss, actor.trainable_variables)
-    critic_grads = crt_tape.gradient(loss, critic.trainable_variables)
+        # Calculate expected returns
+        _returns_n = get_expected_return(_rewards_n, gamma, standardize=False)
 
-    # Apply the gradients to the model's parameters
-    actor_optimizer.apply_gradients(zip(actor_grads, actor.trainable_variables))
-    critic_optimizer.apply_gradients(zip(critic_grads, critic.trainable_variables))
+        # Convert training data to appropriate TF tensor shapes
+        _old_log_probs_n1, _values_n1, _returns_n1 = [
+            tf.expand_dims(x, 1) for x in [_old_log_probs_n, _values_n, _returns_n]]
+
+        old_log_probs_n1 = tf.concat([old_log_probs_n1, _old_log_probs_n1], 0)
+        values_n1 = tf.concat([values_n1, _values_n1], 0)
+        returns_n1 = tf.concat([returns_n1, _returns_n1], 0)
+        states_no = tf.concat([states_no, _states_no], 0)
+        actions_na = tf.concat([actions_na, _actions_na], 0)
+
+    ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, returns_n1))
+    ds = ds.shuffle(512).batch(minibatch_size).repeat(n_epochs)
+
+    for actions, states, old_log_probs, returns in ds:
+        # inside the tape actor & critic mus do a fordward computation
+        # this fordward pass was done before in the rollout function, but, since
+        # now the old_actor is the one running doing it, need to redo it inside compute_loss
+        # print(actions, states, old_log_probs, returns)
+        with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
+            # Calculating loss values to update our network
+            loss = compute_loss(actor, actions, states, old_log_probs, returns)
+
+        # Compute the gradients from the loss
+        actor_grads = act_tape.gradient(loss, actor.trainable_variables)
+        critic_grads = crt_tape.gradient(loss, critic.trainable_variables)
+
+        # Apply the gradients to the model's parameters
+        actor_optimizer.apply_gradients(zip(actor_grads, actor.trainable_variables))
+        critic_optimizer.apply_gradients(zip(critic_grads, critic.trainable_variables))
 
     episode_reward = tf.math.reduce_sum(rewards_n)
     # print(actor.trainable_variables)
@@ -308,7 +352,7 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
     state = tf.constant(env.reset(), dtype=tf.float32)
     for i in range(1, max_steps + 1):
         state = tf.expand_dims(state, 0)
-        action_na = actor(state).sample()
+        action_na = actor(state).mean()
 
         state, _, done, _ = env.step(action_na[0])
         state = tf.constant(state, dtype=tf.float32)
@@ -325,17 +369,17 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
 #####
 
 if __name__ == '__main__':
-
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    writer = tf.summary.create_file_writer(join('logs', current_time))
+    logdir = join('logs', current_time)
+    writer = tf.summary.create_file_writer(logdir)
 
-    actor_opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
+    actor_opt = tf.keras.optimizers.Adam(learning_rate=3e-4)
     critic_opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
 
-    max_episodes = 5000
+    # max_episodes = 600
     max_steps_per_episode = 200
-    # max_episodes = 4
-    # max_steps_per_episode = 4
+    max_episodes = 4
+    # max_steps_per_episode = 2
 
     # Pendulum-v0 is considered solved if average reward is >= 180 over 100
     # consecutive trials
