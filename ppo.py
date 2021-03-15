@@ -36,9 +36,10 @@ def get_env(env_name: str = 'Pendulum-v0') -> gym.Env:
 # - DONE trainning loop
 # - DONE logging?
 # - model saving?
-# - rollout loop could restart and get more data
-# - minibatch traing
-# - multiple epochs
+# - DONE rollout loop could restart and get more data
+# - DONE minibatch traing
+# - DONE multiple epochs
+# - get_expected_return should return list of the multiple env resets
 
 
 class GaussianSample(layers.Layer):
@@ -122,9 +123,28 @@ def get_env_step(env: gym.Env) -> TFStep:
 
     return tf_env_step
 
+def get_env_reset(env: gym.Env) -> TFStep:
+    """
+    Return a Tensorflow function that wraps OpenAI Gym's `env.restart` call
+    This would allow it to be included in a callable TensorFlow graph.
+    """
+    def env_reset() -> np.ndarray:
+        """
+        returns new state, reward, done
+        """
+        state = env.reset()
+        return state.astype(np.float32)
+
+    def tf_env_reset() -> tf.Tensor:
+        # return tf.numpy_function(env_reset, [], tf.float32)
+        return tf.numpy_function(env_reset, [], tf.float32)
+
+    return tf_env_reset
+
 def run_rollout(
         env: gym.Env,
         env_step: TFStep,
+        env_reset: TFStep,
         initial_state: tf.Tensor,
         actor: tf.keras.Model,
         critic: tf.keras.Model,
@@ -136,8 +156,8 @@ def run_rollout(
     actions = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
     values = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
     rewards = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+    dones = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
 
-    # print('initial state')
     initial_state_shape = initial_state.shape
     state = initial_state
     # state = initial_state
@@ -154,12 +174,8 @@ def run_rollout(
         actions = actions.write(t, tf.squeeze(action_na, axis=1))
 
         # get log probabilities by summing the logs, remember action is [n x a]
-        # print(action_dists)
         logp_n = action_dists.log_prob(action_na)
-        # print(action_na, logp_n)
-        # print(logp_n)
         logp_n = tf.reduce_sum(logp_n, axis=1)
-        # print(logp_n)
 
         # store state values
         states = states.write(t, tf.squeeze(state))
@@ -179,36 +195,52 @@ def run_rollout(
         # Store reward
         rewards = rewards.write(t, reward)
 
+        # store dones
+        dones = dones.write(t, done)
+
         if tf.cast(done, tf.bool):
-            break
+            state = env_reset()
+            # need this for @tf.function
+            state.set_shape(initial_state_shape)
+
 
     action_log_probs = action_log_probs.stack()
     values = values.stack()
     rewards = rewards.stack()
     states = states.stack()
     actions = actions.stack()
+    dones = dones.stack()
 
-    # print(action_log_probs, values, rewards, states, actions)
 
     # these are simple arrays
-    return action_log_probs, values, rewards, states, actions
+    return actions, states, dones, values, rewards, action_log_probs
 
 def get_expected_return(
-        rewards: tf.Tensor,
+        rewards_n: tf.Tensor,
+        dones_n: tf.Tensor,
         gamma: float,
-        standardize: bool = True) -> tf.Tensor:
+        standardize: bool = False) -> tf.Tensor:
     """Compute expected returns per timestep."""
 
-    n = tf.shape(rewards)[0]
+    print(gamma)
+    n = tf.shape(rewards_n)[0]
     returns = tf.TensorArray(dtype=tf.float32, size=n)
 
-    # Start from the end of `rewards` and accumulate reward sums
+    # Start from the end of `rewards_n` and accumulate reward sums
     # into the `returns` array
-    rewards = tf.cast(rewards[::-1], dtype=tf.float32)
+    rewards_n = tf.cast(rewards_n[::-1], dtype=tf.float32) # sometimes it's int32
+    dones_n = dones_n[::-1]                                # always int32
     discounted_sum = tf.constant(0.0)
     discounted_sum_shape = discounted_sum.shape
+    # example
+    # 1 2 3 4 5(done) 6 7 8(done) 9 10
+    # 10 9 8(done) 7 6 5(done) 4 3 2 1
+    # if current is done, reset discounted sum
+
     for i in tf.range(n):
-        reward = rewards[i]
+        if tf.cast(dones_n[i], tf.bool):
+            discounted_sum = tf.constant(0.0)
+        reward = rewards_n[i]
         discounted_sum = reward + gamma * discounted_sum
         # not sure about this one
         discounted_sum.set_shape(discounted_sum_shape)
@@ -237,37 +269,18 @@ def compute_loss(
     # doing the forward pass
     action_dists, values_n1 = actor(states_no), critic(states_no)
 
-    # print('compute loss')
-    # print(returns_n1, values_n1)
     adv_n1 = returns_n1 - values_n1
-    # print(adv_n1)
     adv_n1 = ((adv_n1 - tf.math.reduce_mean(adv_n1)) /
               (tf.math.reduce_std(adv_n1) + eps))
-    # print(adv_n1)
-
-    # print(dists, actions_na, old_log_probs_n, states_no, values_n, returns_n)
-    # print(old_log_probs_n1)
-    # print(dists.log_prob(actions_na))
-
     # remember if action is countinuous and space > 1, need to sum the log_props
     log_probs_n1 = tf.reduce_mean(action_dists.log_prob(actions_na), axis=1, keepdims=True)
-
-    # print(log_probs_n1, old_log_probs_n1)
-    # print(log_probs_n1 - old_log_probs_n1)
     ratio_n = tf.exp(log_probs_n1 - old_log_probs_n1)
-    # print(ratio_n)
     clipped_ratio_n = tf.clip_by_value(ratio_n, 1.0 - epsilon, 1.0 + epsilon)
-    # print(clipped_ratio_n)
+
 
     surrogate_min = tf.minimum(ratio_n * adv_n1, clipped_ratio_n * adv_n1)
-    # print(surrogate_min)
     surrogate_min = tf.reduce_mean(surrogate_min)
-    # print(surrogate_min)
-
-    # critic_loss = huber_loss(values_n1, returns_n1)
     critic_loss = mse_loss(returns_n1, values_n1)
-    # print(critic_loss)
-    # print(tf.reduce_mean(action_dists.entropy()))
 
     return -surrogate_min + 0.5*critic_loss - 0.01*tf.reduce_mean(action_dists.entropy())
 
@@ -276,6 +289,7 @@ def compute_loss(
 def train_step(
         env: gym.Env,
         env_step: TFStep,
+        env_reset: TFStep,
         initial_state: tf.Tensor,
         actor: tf.keras.Model, old_actor: tf.keras.Model,
         critic: tf.keras.Model,
@@ -288,34 +302,16 @@ def train_step(
     """Runs a model training step."""
 
     # Run the model for one episode to collect training data using old_actor
-    old_log_probs_n, values_n, rewards_n, states_no, actions_na = run_rollout(
-        env, env_step, initial_state, old_actor, critic, max_steps_per_episode)
+    actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n = run_rollout(
+        env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_episode)
 
     # Calculate expected returns
-    returns_n = get_expected_return(rewards_n, gamma, standardize=False)
+    # print('before get_expected_return', rewards_n)
+    returns_n, return_sums = get_expected_return(rewards_n, dones_n, gamma, standardize=False)
 
     # Convert training data to appropriate TF tensor shapes
-    old_log_probs_n1, values_n1, returns_n1 = [
-        tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n]]
-
-    # get 2000 length data, messy
-    for i in range(9):
-        initial_state = tf.constant(env.reset(), dtype=tf.float32)
-        _old_log_probs_n, _values_n, _rewards_n, _states_no, _actions_na = run_rollout(
-            env, env_step, initial_state, old_actor, critic, max_steps_per_episode)
-
-        # Calculate expected returns
-        _returns_n = get_expected_return(_rewards_n, gamma, standardize=False)
-
-        # Convert training data to appropriate TF tensor shapes
-        _old_log_probs_n1, _values_n1, _returns_n1 = [
-            tf.expand_dims(x, 1) for x in [_old_log_probs_n, _values_n, _returns_n]]
-
-        old_log_probs_n1 = tf.concat([old_log_probs_n1, _old_log_probs_n1], 0)
-        values_n1 = tf.concat([values_n1, _values_n1], 0)
-        returns_n1 = tf.concat([returns_n1, _returns_n1], 0)
-        states_no = tf.concat([states_no, _states_no], 0)
-        actions_na = tf.concat([actions_na, _actions_na], 0)
+    old_log_probs_n1, values_n1, returns_n1, dones_n1 = [
+        tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n, dones_n]]
 
     ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, returns_n1))
     ds = ds.shuffle(512).batch(minibatch_size).repeat(n_epochs)
@@ -392,6 +388,7 @@ if __name__ == '__main__':
 
     env = get_env('Pendulum-v0')
     env_step = get_env_step(env)
+    env_reset = get_env_reset(env)
 
     # Only for continuous obs & continuous act
     assert isinstance(env.observation_space, Box) and \
@@ -406,9 +403,10 @@ if __name__ == '__main__':
         for i in t:
             initial_state = tf.constant(env.reset(), dtype=tf.float32)
             episode_reward = int(train_step(
-                env, env_step, initial_state,
+                env, env_step, env_reset, initial_state,
                 actor=actor, old_actor=old_actor, critic=critic,
                 actor_optimizer=actor_opt, critic_optimizer=critic_opt,
+                n_epochs=10, minibatch_size=64,
                 gamma=gamma, max_steps_per_episode=max_steps_per_episode))
 
             # update old-actor with the learned actor
