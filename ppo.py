@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow_probability import distributions as tfpd, layers as tfpl
+from tensorboard.plugins.hparams import api as hp
 import gym
 from gym.spaces import Discrete, Box
 
@@ -17,7 +18,6 @@ np.random.seed(seed)
 
 # Small epsilon value for stabilizing division operations
 eps = np.finfo(np.float32).eps.item()
-
 
 # Create the environment
 def get_env(env_name: str = 'Pendulum-v0') -> gym.Env:
@@ -123,7 +123,7 @@ def get_env_step(env: gym.Env) -> TFStep:
 
     return tf_env_step
 
-def get_env_reset(env: gym.Env) -> TFStep:
+def get_env_reset(env: gym.Env) -> Callable[[], tf.Tensor]:
     """
     Return a Tensorflow function that wraps OpenAI Gym's `env.restart` call
     This would allow it to be included in a callable TensorFlow graph.
@@ -259,12 +259,10 @@ def get_expected_return(
 
     return returns
 
-
-huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.SUM)
-mse_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)
-
 def compute_loss(
+        critic_loss_fn: tf.keras.losses.Loss, # bad type hint :c
         actor: tf.keras.Model,
+        critic: tf.keras.Model,
         actions_na: tf.Tensor,
         states_no: tf.Tensor,
         old_log_probs_n1: tf.Tensor,
@@ -286,63 +284,70 @@ def compute_loss(
 
     surrogate_min = tf.minimum(ratio_n * adv_n1, clipped_ratio_n * adv_n1)
     surrogate_min = tf.reduce_mean(surrogate_min)
-    critic_loss = mse_loss(returns_n1, values_n1)
+    critic_loss = critic_loss_fn(returns_n1, values_n1)
 
     return -surrogate_min + 0.5*critic_loss - 0.01*tf.reduce_mean(action_dists.entropy())
 
+TFStep = Callable[[tf.Tensor], List[tf.Tensor]]
 
-@tf.function
-def train_step(
+def get_train_step(
         env: gym.Env,
         env_step: TFStep,
         env_reset: TFStep,
-        initial_state: tf.Tensor,
         actor: tf.keras.Model, old_actor: tf.keras.Model,
         critic: tf.keras.Model,
+        critic_loss_fn: tf.keras.losses.Loss,
         actor_optimizer: tf.keras.optimizers.Optimizer,
         critic_optimizer: tf.keras.optimizers.Optimizer,
         gamma: float,
         n_epochs: int,
         minibatch_size: int,
-        max_steps_per_episode: int) -> tf.Tensor:
-    """Runs a model training step."""
+        max_steps_per_episode: int) -> Callable[[tf.Tensor], tf.Tensor]:
 
-    # Run the model for one episode to collect training data using old_actor
-    actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n, reward_sums = run_rollout(
-        env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_episode)
+    @tf.function
+    def train_step(initial_state: tf.Tensor) -> tf.Tensor:
+        """Runs a model training step."""
 
-    # Calculate expected returns
-    # print('before get_expected_return', rewards_n)
-    returns_n = get_expected_return(rewards_n, dones_n, gamma)
+        # Run the model for one episode to collect training data using old_actor
+        actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n, reward_sums = run_rollout(
+            env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_episode)
 
-    # Convert training data to appropriate TF tensor shapes
-    old_log_probs_n1, values_n1, returns_n1, dones_n1 = [
-        tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n, dones_n]]
+        # Calculate expected returns
+        # print('before get_expected_return', rewards_n)
+        returns_n = get_expected_return(rewards_n, dones_n, gamma)
 
-    ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, returns_n1))
-    ds = ds.shuffle(512).batch(minibatch_size).repeat(n_epochs)
+        # Convert training data to appropriate TF tensor shapes
+        old_log_probs_n1, values_n1, returns_n1, dones_n1 = [
+            tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n, dones_n]]
 
-    for actions, states, old_log_probs, returns in ds:
-        # inside the tape actor & critic mus do a fordward computation
-        # this fordward pass was done before in the rollout function, but, since
-        # now the old_actor is the one running doing it, need to redo it inside compute_loss
-        # print(actions, states, old_log_probs, returns)
-        with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
-            # Calculating loss values to update our network
-            loss = compute_loss(actor, actions, states, old_log_probs, returns)
+        ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, returns_n1))
+        ds = ds.shuffle(512).batch(minibatch_size).repeat(n_epochs)
 
-        # Compute the gradients from the loss
-        actor_grads = act_tape.gradient(loss, actor.trainable_variables)
-        critic_grads = crt_tape.gradient(loss, critic.trainable_variables)
+        for actions, states, old_log_probs, returns in ds:
+            # inside the tape actor & critic mus do a fordward computation
+            # this fordward pass was done before in the rollout function, but, since
+            # now the old_actor is the one running doing it, need to redo it inside compute_loss
+            # print(actions, states, old_log_probs, returns)
+            with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
+                # Calculating loss values to update our network
+                loss = compute_loss(critic_loss_fn, actor, critic, actions, states, old_log_probs, returns)
 
-        # Apply the gradients to the model's parameters
-        actor_optimizer.apply_gradients(zip(actor_grads, actor.trainable_variables))
-        critic_optimizer.apply_gradients(zip(critic_grads, critic.trainable_variables))
+            # Compute the gradients from the loss
+            actor_grads = act_tape.gradient(loss, actor.trainable_variables)
+            critic_grads = crt_tape.gradient(loss, critic.trainable_variables)
 
-    # print(reward_sums)
-    episode_reward = tf.math.reduce_mean(reward_sums)
+            # Apply the gradients to the model's parameters
+            actor_optimizer.apply_gradients(zip(actor_grads, actor.trainable_variables))
+            critic_optimizer.apply_gradients(zip(critic_grads, critic.trainable_variables))
 
-    return episode_reward
+        # print(reward_sums)
+        # rewards_sums is shape (e,), where e is the number of env restarts + 1
+        episode_reward = tf.math.reduce_mean(reward_sums)
+
+        return episode_reward
+
+
+    return train_step
 
 #####
 # Shmall animation
@@ -386,11 +391,12 @@ if __name__ == '__main__':
     # Pendulum-v0 is considered solved if average reward is >= 180 over 100
     # consecutive trials
     # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
-    reward_threshold = -300
+    reward_threshold = -200
     running_reward = 0
 
-    # Discount factor for future rewards
-    gamma = 0.99
+    ####
+    # Experiment parameters
+    ####
 
     env = get_env('Pendulum-v0')
     env_step = get_env_step(env)
@@ -405,6 +411,21 @@ if __name__ == '__main__':
     old_actor = get_actor(obs_dim, act_dim)
     critic = get_critic(obs_dim)
 
+    # loss
+    huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.SUM)
+    mse_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)
+
+    # Discount factor for future rewards
+    gamma = 0.99
+
+    train_step = get_train_step(
+        env, env_step, env_reset,
+        actor=actor, old_actor=old_actor, critic=critic,
+        critic_loss_fn=mse_loss,
+        actor_optimizer=actor_opt, critic_optimizer=critic_opt,
+        gamma=gamma, n_epochs=10, minibatch_size=64,
+        max_steps_per_episode=max_steps_per_episode)
+
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
@@ -413,12 +434,7 @@ if __name__ == '__main__':
             initial_state = tf.constant(env.reset(), dtype=tf.float32)
 
             # tf.summary.trace_on(graph=True, profiler=True)
-            episode_reward = int(train_step(
-                env, env_step, env_reset, initial_state,
-                actor=actor, old_actor=old_actor, critic=critic,
-                actor_optimizer=actor_opt, critic_optimizer=critic_opt,
-                n_epochs=10, minibatch_size=64,
-                gamma=gamma, max_steps_per_episode=max_steps_per_episode))
+            episode_reward = int(train_step(initial_state))
             with writer.as_default():
                 # tf.summary.trace_export(
                 #     name='train_step',
