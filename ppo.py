@@ -163,7 +163,7 @@ def run_rollout(
     state = initial_state
     # state = initial_state
 
-    # first env-episode
+    # first episode
     j = 0
     reward_sums = reward_sums.write(j, 0.0)
     for t in tf.range(max_steps):
@@ -198,7 +198,7 @@ def run_rollout(
 
         # Store reward
         rewards = rewards.write(t, reward)
-        # add the current reward to the cumulative reward for this env-episode
+        # add the current reward to the cumulative reward for the episode
         reward_sums = reward_sums.write(j, reward_sums.read(j) + reward)
 
         # store dones
@@ -208,7 +208,7 @@ def run_rollout(
             state = env_reset()
             # need this for @tf.function
             state.set_shape(initial_state_shape)
-            # an env-episode is completed
+            # the episode is completed
             j += 1
             reward_sums = reward_sums.write(j, 0.0)
 
@@ -302,15 +302,15 @@ def get_train_step(
         gamma: float,
         n_epochs: int,
         minibatch_size: int,
-        max_steps_per_episode: int) -> Callable[[tf.Tensor], tf.Tensor]:
+        max_steps_per_iteration: int) -> Callable[[tf.Tensor], tf.Tensor]:
 
     @tf.function
     def train_step(initial_state: tf.Tensor) -> tf.Tensor:
         """Runs a model training step."""
 
-        # Run the model for one episode to collect training data using old_actor
+        # Run the model for T=max_steps_per_iteration to collect training data using old_actor
         actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n, reward_sums = run_rollout(
-            env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_episode)
+            env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_iteration)
 
         # Calculate expected returns
         # print('before get_expected_return', rewards_n)
@@ -342,9 +342,9 @@ def get_train_step(
 
         # print(reward_sums)
         # rewards_sums is shape (e,), where e is the number of env restarts + 1
-        episode_reward = tf.math.reduce_mean(reward_sums)
+        iteration_reward = tf.math.reduce_mean(reward_sums)
 
-        return episode_reward
+        return iteration_reward
 
 
     return train_step
@@ -383,10 +383,10 @@ if __name__ == '__main__':
     actor_opt = tf.keras.optimizers.Adam(learning_rate=3e-4)
     critic_opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
 
-    max_episodes = 600
-    max_steps_per_episode = 2048
-    # max_episodes = 2
-    # max_steps_per_episode = 500
+    max_iterations = 600
+    max_steps_per_iteration = 2048
+    # max_iterations = 2
+    # max_steps_per_iteration = 500
 
     # Pendulum-v0 is considered solved if average reward is >= 180 over 100
     # consecutive trials
@@ -424,42 +424,42 @@ if __name__ == '__main__':
         critic_loss_fn=mse_loss,
         actor_optimizer=actor_opt, critic_optimizer=critic_opt,
         gamma=gamma, n_epochs=10, minibatch_size=64,
-        max_steps_per_episode=max_steps_per_episode)
+        max_steps_per_iteration=max_steps_per_iteration)
 
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
-    with tqdm.trange(max_episodes) as t:
+    with tqdm.trange(max_iterations) as t:
         for i in t:
             initial_state = tf.constant(env.reset(), dtype=tf.float32)
 
             # tf.summary.trace_on(graph=True, profiler=True)
-            episode_reward = int(train_step(initial_state))
+            iteration_reward = int(train_step(initial_state))
             with writer.as_default():
                 # tf.summary.trace_export(
                 #     name='train_step',
                 #     step=i,
                 #     profiler_outdir=logdir)
                 tf.summary.scalar('log std', actor.get_layer('gaussian_sample').log_std[0], i)
-                tf.summary.scalar('epoch mean', episode_reward, i)
+                tf.summary.scalar('epoch mean', iteration_reward, i)
 
             # update old-actor with the learned actor
             # hope this works
             old_actor.set_weights(actor.get_weights())
 
 
-            running_reward = episode_reward*0.01 + running_reward*.99
+            running_reward = iteration_reward*0.01 + running_reward*.99
 
-            t.set_description(f'Episode {i}')
+            t.set_description(f'Iteration {i}')
             t.set_postfix(
-                episode_reward=episode_reward, running_reward=running_reward)
+                iteration_reward=iteration_reward, running_reward=running_reward)
 
             # finish if running_reward is better than threshold and if
-            # episodes are greater than the running_window steps
+            # number of iterations are greater than the running_window steps
             # important the second part when working with negative rewards
             if running_reward > reward_threshold and i >= 100:
                 break
 
-        print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
+        print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
         render_episode(env, actor, 200)
