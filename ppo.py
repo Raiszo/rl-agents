@@ -1,4 +1,4 @@
-from typing import Any, List, Sequence, Tuple, Callable, NoReturn
+from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict
 import datetime
 from os.path import join
 
@@ -148,7 +148,7 @@ def run_rollout(
         initial_state: tf.Tensor,
         actor: tf.keras.Model,
         critic: tf.keras.Model,
-        max_steps: int) -> List[tf.Tensor]:
+        steps: int) -> List[tf.Tensor]:
     """Run the model in the environment for t=max_steps"""
 
     action_log_probs = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
@@ -166,7 +166,7 @@ def run_rollout(
     # first episode
     j = 0
     reward_sums = reward_sums.write(j, 0.0)
-    for t in tf.range(max_steps):
+    for t in tf.range(steps):
         # Convert state into a batched tensor (batch size = 1)
         state = tf.expand_dims(state, 0)
 
@@ -302,7 +302,7 @@ def get_train_step(
         gamma: float,
         n_epochs: int,
         minibatch_size: int,
-        max_steps_per_iteration: int) -> Callable[[tf.Tensor], tf.Tensor]:
+        iteration_size: int) -> Callable[[tf.Tensor], tf.Tensor]:
 
     @tf.function
     def train_step(initial_state: tf.Tensor) -> tf.Tensor:
@@ -310,7 +310,7 @@ def get_train_step(
 
         # Run the model for T=max_steps_per_iteration to collect training data using old_actor
         actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n, reward_sums = run_rollout(
-            env, env_step, env_reset, initial_state, old_actor, critic, max_steps_per_iteration)
+            env, env_step, env_reset, initial_state, old_actor, critic, iteration_size)
 
         # Calculate expected returns
         # print('before get_expected_return', rewards_n)
@@ -371,36 +371,29 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
         if done:
             break
 
-#####
-# Trainning loop
-#####
+####
+# Hparams
+####
+HP_N_ITERATIONS = hp.HParam('n_iterations')
+HP_ITERATION_SIZE = hp.HParam('iteration_size')
+HP_N_EPOCHS = hp.HParam('n_epochs')
+HP_MINIBATCH_SIZE = hp.HParam('minibatch_size')
+HP_ACTOR_LR = hp.HParam('actor_lr')
+HP_CRITIC_LR = hp.HParam('critic_lr')
 
-if __name__ == '__main__':
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    logdir = join('logs', current_time)
-    writer = tf.summary.create_file_writer(logdir)
+HP_GAMMA = hp.HParam('gamma')
+HP_ENVIRONMENT = hp.HParam('environment')
+# HP_INITIAL_LOG_STD = hp.HParam('initial_log_std')
 
-    actor_opt = tf.keras.optimizers.Adam(learning_rate=3e-4)
-    critic_opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
 
-    max_iterations = 600
-    max_steps_per_iteration = 2048
-    # max_iterations = 2
-    # max_steps_per_iteration = 500
-
-    # Pendulum-v0 is considered solved if average reward is >= 180 over 100
-    # consecutive trials
-    # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
-    reward_threshold = -200
-    running_reward = 0
-
-    ####
-    # Experiment parameters
-    ####
-
-    env = get_env('Pendulum-v0')
+def run_experiment(hparams: Dict[hp.HParam, Any]) -> None:
+    # environment setup
+    env = get_env(hparams[HP_ENVIRONMENT])
     env_step = get_env_step(env)
     env_reset = get_env_reset(env)
+
+    actor_opt = tf.keras.optimizers.Adam(learning_rate=hparams[HP_ACTOR_LR])
+    critic_opt = tf.keras.optimizers.Adam(learning_rate=hparams[HP_CRITIC_LR])
 
     # Only for continuous obs & continuous act
     assert isinstance(env.observation_space, Box) and \
@@ -423,13 +416,15 @@ if __name__ == '__main__':
         actor=actor, old_actor=old_actor, critic=critic,
         critic_loss_fn=mse_loss,
         actor_optimizer=actor_opt, critic_optimizer=critic_opt,
-        gamma=gamma, n_epochs=10, minibatch_size=64,
-        max_steps_per_iteration=max_steps_per_iteration)
+        gamma=hparams[HP_GAMMA],
+        n_epochs=hparams[HP_N_EPOCHS],
+        minibatch_size=hparams[HP_MINIBATCH_SIZE],
+        iteration_size=hparams[HP_ITERATION_SIZE])
 
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
-    with tqdm.trange(max_iterations) as t:
+    with tqdm.trange(hparams[HP_N_ITERATIONS]) as t:
         for i in t:
             initial_state = tf.constant(env.reset(), dtype=tf.float32)
 
@@ -463,3 +458,33 @@ if __name__ == '__main__':
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
         render_episode(env, actor, 200)
+
+if __name__ == '__main__':
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    logdir = join('logs', current_time)
+    writer = tf.summary.create_file_writer(logdir)
+
+    # Pendulum-v0 is considered solved if average reward is >= 180 over 100
+    # consecutive trials
+    # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
+    reward_threshold = -200
+    running_reward = 0
+
+    ####
+    # Experiment parameters
+    ####
+    hparams = {
+        HP_N_ITERATIONS: 600,
+        HP_ITERATION_SIZE: 2048,
+        HP_N_EPOCHS: 10,
+        HP_MINIBATCH_SIZE: 64,
+
+        HP_GAMMA: 0.99,
+        HP_ENVIRONMENT: 'Pendulum-v0',
+
+        HP_ACTOR_LR: 3e-4,
+        HP_CRITIC_LR: 5e-3,
+        # HP_INITIAL_LOG_STD
+    }
+
+    run_experiment(hparams)
