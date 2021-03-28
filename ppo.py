@@ -1,6 +1,7 @@
 from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict
 import datetime
-from os.path import join
+from os import path
+import uuid
 
 import tqdm
 import numpy as np
@@ -353,15 +354,17 @@ def get_train_step(
 # Shmall animation
 #####
 
-def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoReturn:
+def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> float:
     screen = env.render(mode='rgb_array')
+    reward_sum = 0.0
 
     state = tf.constant(env.reset(), dtype=tf.float32)
     for i in range(1, max_steps + 1):
         state = tf.expand_dims(state, 0)
         action_na = actor(state).mean()
 
-        state, _, done, _ = env.step(action_na[0])
+        state, reward, done, _ = env.step(action_na[0])
+        reward_sum += reward.astype(np.float32).item()
         state = tf.constant(state, dtype=tf.float32)
 
         # Render screen every 10 steps
@@ -370,6 +373,8 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> NoRet
 
         if done:
             break
+
+    return reward_sum
 
 ####
 # Hparams
@@ -384,9 +389,11 @@ HP_CRITIC_LR = hp.HParam('critic_lr')
 HP_GAMMA = hp.HParam('gamma')
 HP_ENVIRONMENT = hp.HParam('environment')
 # HP_INITIAL_LOG_STD = hp.HParam('initial_log_std')
+METRIC_FINAL_REWARD = 'final_reward'
+METRIC_EPOCH_REWARD = 'epoch_reward'
 
 
-def run_experiment(hparams: Dict[hp.HParam, Any]) -> None:
+def run_experiment(hparams: Dict[hp.HParam, Any], logdir: str, trial_id: str) -> None:
     # environment setup
     env = get_env(hparams[HP_ENVIRONMENT])
     env_step = get_env_step(env)
@@ -424,19 +431,25 @@ def run_experiment(hparams: Dict[hp.HParam, Any]) -> None:
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
+    writer = tf.summary.create_file_writer(path.join(logdir, trial_id))
+
+    reward_threshold = -200
+
+    running_reward = 0
     with tqdm.trange(hparams[HP_N_ITERATIONS]) as t:
         for i in t:
             initial_state = tf.constant(env.reset(), dtype=tf.float32)
 
             # tf.summary.trace_on(graph=True, profiler=True)
             iteration_reward = int(train_step(initial_state))
+            # with writer.as_default():
             with writer.as_default():
                 # tf.summary.trace_export(
                 #     name='train_step',
                 #     step=i,
                 #     profiler_outdir=logdir)
                 tf.summary.scalar('log std', actor.get_layer('gaussian_sample').log_std[0], i)
-                tf.summary.scalar('epoch mean', iteration_reward, i)
+                tf.summary.scalar(METRIC_EPOCH_REWARD, iteration_reward, i)
 
             # update old-actor with the learned actor
             # hope this works
@@ -457,18 +470,19 @@ def run_experiment(hparams: Dict[hp.HParam, Any]) -> None:
 
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
-        render_episode(env, actor, 200)
+        final_reward_mean = render_episode(env, actor, 200)
+
+        with writer.as_default():
+            hp.hparams(hparams, trial_id=trial_id)
+            tf.summary.scalar(METRIC_FINAL_REWARD, final_reward_mean ,step=1)
+
+
 
 if __name__ == '__main__':
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    logdir = join('logs', current_time)
-    writer = tf.summary.create_file_writer(logdir)
-
     # Pendulum-v0 is considered solved if average reward is >= 180 over 100
     # consecutive trials
     # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
-    reward_threshold = -200
-    running_reward = 0
+    base_logdir = 'logs'
 
     ####
     # Experiment parameters
@@ -487,4 +501,17 @@ if __name__ == '__main__':
         # HP_INITIAL_LOG_STD
     }
 
-    run_experiment(hparams)
+    with tf.summary.create_file_writer(path.join(base_logdir, 'hparam_tuning')).as_default():
+        hp.hparams_config(
+            hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
+                     HP_GAMMA, HP_ENVIRONMENT,
+                     HP_ACTOR_LR, HP_CRITIC_LR],
+            metrics=[hp.Metric(METRIC_FINAL_REWARD, display_name='final reward mean'),
+                     hp.Metric(METRIC_EPOCH_REWARD, display_name='epoch reward')],
+        )
+
+    trial_id = str(uuid.uuid4())
+    experiment_logdir = path.join(base_logdir, 'experiments')
+    # print(trial_id, experiment_logdir)
+
+    run_experiment(hparams, logdir=experiment_logdir, trial_id=trial_id)
