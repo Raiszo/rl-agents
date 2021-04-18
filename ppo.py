@@ -393,7 +393,7 @@ METRIC_FINAL_REWARD = 'final_reward'
 METRIC_EPOCH_REWARD = 'epoch_reward'
 
 
-def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, base_dir: str) -> None:
+def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str) -> None:
     # environment setup
     env = get_env(hparams[HP_ENVIRONMENT])
     env_step = get_env_step(env)
@@ -431,7 +431,9 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, base_dir: str) 
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
-    writer = tf.summary.create_file_writer(path.join(base_dir, 'logs', trial_id))
+    base_dir = path.join(trials_dir, trial_id)
+    # {trial_id}/logs
+    writer = tf.summary.create_file_writer(path.join(base_dir, 'logs'))
 
     reward_threshold = -200
 
@@ -461,6 +463,7 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, base_dir: str) 
             t.set_postfix(
                 iteration_reward=iteration_reward, running_reward=running_reward)
 
+            # {trial_id}/models/[actor|critic]
             actor.save_weights(path.join(base_dir, 'models', 'actor'), save_format='tf')
             critic.save_weights(path.join(base_dir, 'models', 'critic'), save_format='tf')
 
@@ -503,6 +506,7 @@ if __name__ == '__main__':
         # HP_INITIAL_LOG_STD
     }
 
+    # saved in experiments/hparam_tuning
     with tf.summary.create_file_writer(path.join(base_dir, 'hparam_tuning')).as_default():
         hp.hparams_config(
             hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
@@ -514,4 +518,5 @@ if __name__ == '__main__':
 
     trial_id = str(uuid.uuid4())
 
+    # base dir is experiments/trials
     run_experiment(hparams, trial_id=trial_id, base_dir=path.join(base_dir, 'trials'))
