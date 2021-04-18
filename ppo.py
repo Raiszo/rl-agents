@@ -393,7 +393,7 @@ METRIC_FINAL_REWARD = 'final_reward'
 METRIC_EPOCH_REWARD = 'epoch_reward'
 
 
-def run_experiment(hparams: Dict[hp.HParam, Any], logdir: str, trial_id: str) -> None:
+def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, base_dir: str) -> None:
     # environment setup
     env = get_env(hparams[HP_ENVIRONMENT])
     env_step = get_env_step(env)
@@ -431,7 +431,7 @@ def run_experiment(hparams: Dict[hp.HParam, Any], logdir: str, trial_id: str) ->
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
-    writer = tf.summary.create_file_writer(path.join(logdir, trial_id))
+    writer = tf.summary.create_file_writer(path.join(base_dir, 'logs', trial_id))
 
     reward_threshold = -200
 
@@ -452,7 +452,6 @@ def run_experiment(hparams: Dict[hp.HParam, Any], logdir: str, trial_id: str) ->
                 tf.summary.scalar(METRIC_EPOCH_REWARD, iteration_reward, i)
 
             # update old-actor with the learned actor
-            # hope this works
             old_actor.set_weights(actor.get_weights())
 
 
@@ -461,6 +460,9 @@ def run_experiment(hparams: Dict[hp.HParam, Any], logdir: str, trial_id: str) ->
             t.set_description(f'Iteration {i}')
             t.set_postfix(
                 iteration_reward=iteration_reward, running_reward=running_reward)
+
+            actor.save_weights(path.join(base_dir, 'models', 'actor'), save_format='tf')
+            critic.save_weights(path.join(base_dir, 'models', 'critic'), save_format='tf')
 
             # finish if running_reward is better than threshold and if
             # number of iterations are greater than the running_window steps
@@ -482,7 +484,7 @@ if __name__ == '__main__':
     # Pendulum-v0 is considered solved if average reward is >= 180 over 100
     # consecutive trials
     # some benchmarks here: https://github.com/gouxiangchen/ac-ppo
-    base_logdir = 'logs'
+    base_dir = 'experiments'
 
     ####
     # Experiment parameters
@@ -501,7 +503,7 @@ if __name__ == '__main__':
         # HP_INITIAL_LOG_STD
     }
 
-    with tf.summary.create_file_writer(path.join(base_logdir, 'hparam_tuning')).as_default():
+    with tf.summary.create_file_writer(path.join(base_dir, 'hparam_tuning')).as_default():
         hp.hparams_config(
             hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
                      HP_GAMMA, HP_ENVIRONMENT,
@@ -511,7 +513,5 @@ if __name__ == '__main__':
         )
 
     trial_id = str(uuid.uuid4())
-    experiment_logdir = path.join(base_logdir, 'experiments')
-    # print(trial_id, experiment_logdir)
 
-    run_experiment(hparams, logdir=experiment_logdir, trial_id=trial_id)
+    run_experiment(hparams, trial_id=trial_id, base_dir=path.join(base_dir, 'trials'))
