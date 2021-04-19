@@ -1,4 +1,5 @@
 # Tensorboard logs
+experiments/*
 logs/*
 
 # emacs files

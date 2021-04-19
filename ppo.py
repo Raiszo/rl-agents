@@ -463,15 +463,21 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str
             t.set_postfix(
                 iteration_reward=iteration_reward, running_reward=running_reward)
 
-            # {trial_id}/models/[actor|critic]
-            actor.save_weights(path.join(base_dir, 'models', 'actor'), save_format='tf')
-            critic.save_weights(path.join(base_dir, 'models', 'critic'), save_format='tf')
+            # save each 50 steps
+            if i % 50 == 0:
+                # {trial_id}/models/[actor|critic]
+                actor.save_weights(path.join(base_dir, 'models', f'actor_{i}'), save_format='tf')
+                critic.save_weights(path.join(base_dir, 'models', f'critic_{i}'), save_format='tf')
 
             # finish if running_reward is better than threshold and if
             # number of iterations are greater than the running_window steps
             # important the second part when working with negative rewards
             if running_reward > reward_threshold and i >= 100:
                 break
+
+        # save the final model
+        actor.save_weights(path.join(base_dir, 'models', f'actor_{t.n}'), save_format='tf')
+        critic.save_weights(path.join(base_dir, 'models', f'critic_{t.n}'), save_format='tf')
 
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
@@ -519,4 +525,4 @@ if __name__ == '__main__':
     trial_id = str(uuid.uuid4())
 
     # base dir is experiments/trials
-    run_experiment(hparams, trial_id=trial_id, base_dir=path.join(base_dir, 'trials'))
+    run_experiment(hparams, trial_id=trial_id, trials_dir=path.join(base_dir, 'trials'))
