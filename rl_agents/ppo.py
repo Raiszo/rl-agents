@@ -393,7 +393,32 @@ METRIC_FINAL_REWARD = 'final_reward'
 METRIC_EPOCH_REWARD = 'epoch_reward'
 
 
-def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str) -> None:
+def run_experiment(
+        environment: str,
+        n_iterations: int, iteration_size: int,
+        n_epochs: int, minibatch_size: int,
+        gamma: float,
+        actor_lr: float, critic_lr: float,
+        base_dir: str) -> None:
+
+    hparams = {
+        HP_N_ITERATIONS: n_iterations,
+        HP_ITERATION_SIZE: iteration_size,
+        HP_N_EPOCHS: n_epochs,
+        HP_MINIBATCH_SIZE: minibatch_size,
+
+        HP_GAMMA: gamma,
+        HP_ENVIRONMENT: environment,
+
+        HP_ACTOR_LR: actor_lr,
+        HP_CRITIC_LR: critic_lr,
+        # HP_INITIAL_LOG_STD
+    }
+    trial_id = str(uuid.uuid4())
+
+    save_hparams(hparams, path.join(base_dir, 'hparam_tuning'))
+
+
     # environment setup
     env = get_env(hparams[HP_ENVIRONMENT])
     env_step = get_env_step(env)
@@ -431,9 +456,9 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str
     # tb_callback = tf.keras.callbacks.TensorBoard(logdir)
     # tb_callback.set_model(actor)
 
-    base_dir = path.join(trials_dir, trial_id)
+    trial_dir = path.join(base_dir, 'trials', trial_id)
     # {trial_id}/logs
-    writer = tf.summary.create_file_writer(path.join(base_dir, 'logs'))
+    writer = tf.summary.create_file_writer(path.join(trial_dir, 'logs'))
 
     reward_threshold = -200
 
@@ -466,8 +491,8 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str
             # save each 50 steps
             if i % 50 == 0:
                 # {trial_id}/models/[actor|critic]
-                actor.save_weights(path.join(base_dir, 'models', f'actor_{i}'), save_format='tf')
-                critic.save_weights(path.join(base_dir, 'models', f'critic_{i}'), save_format='tf')
+                actor.save_weights(path.join(trial_dir, 'models', f'actor_{i}'), save_format='tf')
+                critic.save_weights(path.join(trial_dir, 'models', f'critic_{i}'), save_format='tf')
 
             # finish if running_reward is better than threshold and if
             # number of iterations are greater than the running_window steps
@@ -476,8 +501,8 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str
                 break
 
         # save the final model
-        actor.save_weights(path.join(base_dir, 'models', f'actor_{t.n}'), save_format='tf')
-        critic.save_weights(path.join(base_dir, 'models', f'critic_{t.n}'), save_format='tf')
+        actor.save_weights(path.join(trial_dir, 'models', f'actor_{t.n}'), save_format='tf')
+        critic.save_weights(path.join(trial_dir, 'models', f'critic_{t.n}'), save_format='tf')
 
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
@@ -487,6 +512,16 @@ def run_experiment(hparams: Dict[hp.HParam, Any], trial_id: str, trials_dir: str
             hp.hparams(hparams, trial_id=trial_id)
             tf.summary.scalar(METRIC_FINAL_REWARD, final_reward_mean ,step=1)
 
+def save_hparams(hparams: Dict[hp.HParam, Any], hparams_dir: str) -> None:
+    # saved in experiments/hparam_tuning
+    with tf.summary.create_file_writer(hparams_dir).as_default():
+        hp.hparams_config(
+            hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
+                     HP_GAMMA, HP_ENVIRONMENT,
+                     HP_ACTOR_LR, HP_CRITIC_LR],
+            metrics=[hp.Metric(METRIC_FINAL_REWARD, display_name='final reward mean'),
+                     hp.Metric(METRIC_EPOCH_REWARD, display_name='epoch reward')],
+        )
 
 
 if __name__ == '__main__':
@@ -498,31 +533,13 @@ if __name__ == '__main__':
     ####
     # Experiment parameters
     ####
-    hparams = {
-        HP_N_ITERATIONS: 600,
-        HP_ITERATION_SIZE: 2048,
-        HP_N_EPOCHS: 10,
-        HP_MINIBATCH_SIZE: 64,
-
-        HP_GAMMA: 0.99,
-        HP_ENVIRONMENT: 'Pendulum-v0',
-
-        HP_ACTOR_LR: 3e-4,
-        HP_CRITIC_LR: 5e-3,
-        # HP_INITIAL_LOG_STD
-    }
-
-    # saved in experiments/hparam_tuning
-    with tf.summary.create_file_writer(path.join(base_dir, 'hparam_tuning')).as_default():
-        hp.hparams_config(
-            hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
-                     HP_GAMMA, HP_ENVIRONMENT,
-                     HP_ACTOR_LR, HP_CRITIC_LR],
-            metrics=[hp.Metric(METRIC_FINAL_REWARD, display_name='final reward mean'),
-                     hp.Metric(METRIC_EPOCH_REWARD, display_name='epoch reward')],
-        )
-
-    trial_id = str(uuid.uuid4())
-
     # base dir is experiments/trials
-    run_experiment(hparams, trial_id=trial_id, trials_dir=path.join(base_dir, 'trials'))
+    run_experiment(
+        environment='Pendulum-v0',
+        n_iterations=600, iteration_size=2048,
+        n_epochs=10, minibatch_size=64,
+        gamma=0.99,
+        actor_lr=3e-4,
+        critic_lr=5e-3,
+        base_dir=base_dir,
+    )
