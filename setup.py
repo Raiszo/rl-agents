@@ -4,9 +4,10 @@ setup(
     name='rl-agents',
     version='0.0.1',
     install_requires=[
-        'tensorflow',
-        'tensorlfow_probability',
+        'tensorflow==2.4.1',
+        'tensorflow-probability==0.12.1',
         'gym[box2d]',
-        'tensorboard',
+        'tensorboard==2.4.1',
+        'tqdm==4.59.0'
     ]
 )
