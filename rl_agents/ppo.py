@@ -70,12 +70,12 @@ class GaussianSample(layers.Layer):
         # better to pass the all values here, remember lambdas should be pure
         return self.normal_dist((input, tf.exp(self.log_std)))
 
-def get_actor(obs_dim: int, act_dim: int) -> tf.keras.Model:
+def get_actor(obs_dim: int, act_dim: int, output_activation: str) -> tf.keras.Model:
     """Get an actor stochastic policy"""
     observation = tf.keras.Input(shape=(obs_dim,))
     x = layers.Dense(64, activation='tanh')(observation)
     x = layers.Dense(64, activation='tanh')(x)
-    logits = layers.Dense(act_dim, name='logits')(x)
+    logits = layers.Dense(act_dim, activation=output_activation, name='logits')(x)
     distributions = GaussianSample(name='gaussian_sample')(logits)
 
     actor = tf.keras.Model(observation, distributions)
@@ -95,8 +95,8 @@ def get_critic(obs_dim: int) -> tf.keras.Model:
 
     return critic
 
-def get_model(obs_dim: int, act_dim: int) -> Tuple[tf.keras.Model, tf.keras.Model]:
-    actor = get_actor(obs_dim, act_dim)
+def get_model(obs_dim: int, act_dim: int, actor_output_activation: str) -> Tuple[tf.keras.Model, tf.keras.Model]:
+    actor = get_actor(obs_dim, act_dim, actor_output_activation)
     critic = get_critic(obs_dim)
 
     return actor, critic
@@ -388,6 +388,7 @@ HP_CRITIC_LR = hp.HParam('critic_lr')
 
 HP_GAMMA = hp.HParam('gamma')
 HP_ENVIRONMENT = hp.HParam('environment')
+HP_ACTOR_OUTPUT = hp.HParam('actor_output')
 # HP_INITIAL_LOG_STD = hp.HParam('initial_log_std')
 METRIC_FINAL_REWARD = 'final_reward'
 METRIC_EPOCH_REWARD = 'epoch_reward'
@@ -399,6 +400,7 @@ def run_experiment(
         n_epochs: int, minibatch_size: int,
         gamma: float,
         actor_lr: float, critic_lr: float,
+        actor_output_activation: str,
         base_dir: str) -> None:
 
     hparams = {
@@ -412,6 +414,7 @@ def run_experiment(
 
         HP_ACTOR_LR: actor_lr,
         HP_CRITIC_LR: critic_lr,
+        HP_ACTOR_OUTPUT: actor_output_activation,
         # HP_INITIAL_LOG_STD
     }
     trial_id = str(uuid.uuid4())
@@ -432,9 +435,8 @@ def run_experiment(
         isinstance(env.action_space, Box)
 
     obs_dim, act_dim = env.observation_space.shape[0], env.action_space.shape[0]
-    actor = get_actor(obs_dim, act_dim)
-    old_actor = get_actor(obs_dim, act_dim)
-    critic = get_critic(obs_dim)
+    actor, critic = get_model(obs_dim, act_dim, actor_output_activation=hparams[HP_ACTOR_OUTPUT])
+    old_actor = get_actor(obs_dim, act_dim, output_activation=actor_output_activation)
 
     # loss
     huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.SUM)
@@ -518,7 +520,7 @@ def save_hparams(hparams: Dict[hp.HParam, Any], hparams_dir: str) -> None:
         hp.hparams_config(
             hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
                      HP_GAMMA, HP_ENVIRONMENT,
-                     HP_ACTOR_LR, HP_CRITIC_LR],
+                     HP_ACTOR_LR, HP_CRITIC_LR, HP_ACTOR_OUTPUT],
             metrics=[hp.Metric(METRIC_FINAL_REWARD, display_name='final reward mean'),
                      hp.Metric(METRIC_EPOCH_REWARD, display_name='epoch reward')],
         )
@@ -541,5 +543,6 @@ if __name__ == '__main__':
         gamma=0.99,
         actor_lr=3e-4,
         critic_lr=5e-3,
+        actor_output_activation='linear',
         base_dir=base_dir,
     )
