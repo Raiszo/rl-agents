@@ -1,4 +1,4 @@
-from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict
+from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict, Optional
 import datetime
 from os import path
 import uuid
@@ -401,7 +401,8 @@ def run_experiment(
         gamma: float,
         actor_lr: float, critic_lr: float,
         actor_output_activation: str,
-        base_dir: str) -> None:
+        base_dir: str,
+        early_stop_reward_threshold: Optional[int]=None) -> None:
 
     hparams = {
         HP_N_ITERATIONS: n_iterations,
@@ -462,8 +463,6 @@ def run_experiment(
     # {trial_id}/logs
     writer = tf.summary.create_file_writer(path.join(trial_dir, 'logs'))
 
-    reward_threshold = -200
-
     running_reward = 0
     with tqdm.trange(hparams[HP_N_ITERATIONS]) as t:
         for i in t:
@@ -499,7 +498,7 @@ def run_experiment(
             # finish if running_reward is better than threshold and if
             # number of iterations are greater than the running_window steps
             # important the second part when working with negative rewards
-            if running_reward > reward_threshold and i >= 100:
+            if early_stop_reward_threshold and running_reward > early_stop_reward_threshold and i >= 100:
                 break
 
         # save the final model
@@ -545,4 +544,5 @@ if __name__ == '__main__':
         critic_lr=5e-3,
         actor_output_activation='linear',
         base_dir=base_dir,
+        early_stop_reward_threshold=-200
     )
