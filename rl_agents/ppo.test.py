@@ -1,7 +1,7 @@
 # import unittest
 import tensorflow as tf
 
-import ppo
+from rl_agents import ppo
 
 class GetExpectedReturnTest(tf.test.TestCase):
     def test_multiple_dones(self):

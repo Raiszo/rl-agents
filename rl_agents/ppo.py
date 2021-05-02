@@ -36,7 +36,7 @@ def get_env(env_name: str = 'Pendulum-v0') -> gym.Env:
 # - DONE trainning step
 # - DONE trainning loop
 # - DONE logging?
-# - model saving?
+# - DONE model saving?
 # - DONE rollout loop could restart and get more data
 # - DONE minibatch traing
 # - DONE multiple epochs
