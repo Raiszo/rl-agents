@@ -393,7 +393,7 @@ HP_GAMMA = hp.HParam('gamma')
 HP_ENVIRONMENT = hp.HParam('environment')
 HP_ACTOR_OUTPUT = hp.HParam('actor_output')
 # HP_INITIAL_LOG_STD = hp.HParam('initial_log_std')
-METRIC_FINAL_REWARD = 'final_reward'
+METRIC_MEAN_REWARD = 'mean_reward'
 METRIC_EPOCH_REWARD = 'epoch_reward'
 
 
@@ -514,11 +514,9 @@ def run_experiment(
 
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 
-        final_reward_mean = render_episode(env, actor, 200)
-
         with writer.as_default():
             hp.hparams(hparams, trial_id=trial_id)
-            tf.summary.scalar(METRIC_FINAL_REWARD, final_reward_mean ,step=1)
+            tf.summary.scalar(METRIC_MEAN_REWARD, running_reward ,step=1)
 
     return actor, critic
 
@@ -529,7 +527,7 @@ def save_hparams(hparams: Dict[hp.HParam, Any], hparams_dir: str) -> None:
             hparams=[HP_N_ITERATIONS, HP_ITERATION_SIZE, HP_N_EPOCHS, HP_MINIBATCH_SIZE,
                      HP_GAMMA, HP_ENVIRONMENT,
                      HP_ACTOR_LR, HP_CRITIC_LR, HP_ACTOR_OUTPUT],
-            metrics=[hp.Metric(METRIC_FINAL_REWARD, display_name='final reward mean'),
+            metrics=[hp.Metric(METRIC_MEAN_REWARD, display_name='final reward mean'),
                      hp.Metric(METRIC_EPOCH_REWARD, display_name='epoch reward')],
         )
 
