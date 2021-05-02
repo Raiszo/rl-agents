@@ -405,7 +405,11 @@ def run_experiment(
         actor_lr: float, critic_lr: float,
         actor_output_activation: str,
         base_dir: str,
-        early_stop_reward_threshold: Optional[int]=None) -> None:
+        early_stop_reward_threshold: Optional[int]=None) -> [tf.keras.Model, tf.keras.Model]:
+    """
+    Returns
+    trained_models: tuple of the trained [actor, critic] keras models
+    """
 
     hparams = {
         HP_N_ITERATIONS: n_iterations,
@@ -515,6 +519,8 @@ def run_experiment(
         with writer.as_default():
             hp.hparams(hparams, trial_id=trial_id)
             tf.summary.scalar(METRIC_FINAL_REWARD, final_reward_mean ,step=1)
+
+    return actor, critic
 
 def save_hparams(hparams: Dict[hp.HParam, Any], hparams_dir: str) -> None:
     # saved in experiments/hparam_tuning
