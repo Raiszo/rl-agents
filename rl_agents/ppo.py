@@ -70,6 +70,10 @@ class GaussianSample(layers.Layer):
         # better to pass the all values here, remember lambdas should be pure
         return self.normal_dist((input, tf.exp(self.log_std)))
 
+    # since no additional variable is used in the __init__ function, no need to declare this
+    # def get_config(self):
+    #     return super().get_config()
+
 def get_actor(obs_dim: int, act_dim: int, output_activation: str) -> tf.keras.Model:
     """Get an actor stochastic policy"""
     observation = tf.keras.Input(shape=(obs_dim,))
@@ -355,10 +359,11 @@ def get_train_step(
 #####
 
 def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> float:
+    state = tf.constant(env.reset(), dtype=tf.float32)
+
     screen = env.render(mode='rgb_array')
     reward_sum = 0.0
 
-    state = tf.constant(env.reset(), dtype=tf.float32)
     for i in range(1, max_steps + 1):
         state = tf.expand_dims(state, 0)
         action_na = actor(state).mean()
@@ -367,9 +372,7 @@ def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> float
         reward_sum += reward.astype(np.float32).item()
         state = tf.constant(state, dtype=tf.float32)
 
-        # Render screen every 10 steps
-        if i % 10 == 0:
-            screen = env.render(mode='rgb_array')
+        screen = env.render(mode='rgb_array')
 
         if done:
             break
@@ -492,8 +495,8 @@ def run_experiment(
             # save each 50 steps
             if i % 50 == 0:
                 # {trial_id}/models/[actor|critic]
-                actor.save_weights(path.join(trial_dir, 'models', f'actor_{i}'), save_format='tf')
-                critic.save_weights(path.join(trial_dir, 'models', f'critic_{i}'), save_format='tf')
+                actor.save(path.join(trial_dir, 'models', f'actor_{i}'), save_traces=False)
+                critic.save(path.join(trial_dir, 'models', f'critic_{i}'), save_traces=False)
 
             # finish if running_reward is better than threshold and if
             # number of iterations are greater than the running_window steps
@@ -502,8 +505,8 @@ def run_experiment(
                 break
 
         # save the final model
-        actor.save_weights(path.join(trial_dir, 'models', f'actor_{t.n}'), save_format='tf')
-        critic.save_weights(path.join(trial_dir, 'models', f'critic_{t.n}'), save_format='tf')
+        actor.save(path.join(trial_dir, 'models', f'actor_{t.n}'), save_traces=False)
+        critic.save(path.join(trial_dir, 'models', f'critic_{t.n}'), save_traces=False)
 
         print(f'\nSolved at iteration {i}: average reward: {running_reward:.2f}!')
 

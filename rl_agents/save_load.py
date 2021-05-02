@@ -11,8 +11,6 @@ def evaluate(model: tf.keras.Model) -> None:
     can be obtained
     """
     test = tf.constant([[2.3, 2.5]])
-    # print('gaussian sample weight', model.get_layer('gaussian_sample').get_weights())
-    # print('weights', model.get_weights())
     dists = model(test)
     print(dists.sample())
 
@@ -20,12 +18,12 @@ def evaluate(model: tf.keras.Model) -> None:
 actor = get_actor(2, 1, 'linear')
 evaluate(actor)
 
-# save it
-actor.save('actor')
+# save it, if tfpl use save_traces to avoid warnings
+actor.save('actor', save_format='tf', save_traces=False)
 
-# load model
-loaded_actor = tf.keras.models.load_model(
-    'actor',
-    custom_objects={'GaussianSample': GaussianSample}
-)
-evaluate(loaded_actor)
+
+# load model, for tfpl layers, this seems mandatory
+custom_objects={'GaussianSample': GaussianSample}
+with tf.keras.utils.custom_object_scope(custom_objects):
+    loaded_actor = tf.keras.models.load_model('actor')
+    evaluate(loaded_actor)
