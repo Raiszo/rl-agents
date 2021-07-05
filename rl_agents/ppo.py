@@ -141,7 +141,6 @@ def get_env_reset(env: gym.Env) -> Callable[[], tf.Tensor]:
         return state.astype(np.float32)
 
     def tf_env_reset() -> tf.Tensor:
-        # return tf.numpy_function(env_reset, [], tf.float32)
         return tf.numpy_function(env_reset, [], tf.float32)
 
     return tf_env_reset
@@ -354,30 +353,6 @@ def get_train_step(
 
     return train_step
 
-#####
-# Shmall animation
-#####
-
-def render_episode(env: gym.Env, actor: tf.keras.Model, max_steps: int) -> float:
-    state = tf.constant(env.reset(), dtype=tf.float32)
-
-    screen = env.render(mode='rgb_array')
-    reward_sum = 0.0
-
-    for i in range(1, max_steps + 1):
-        state = tf.expand_dims(state, 0)
-        action_na = actor(state).mean()
-
-        state, reward, done, _ = env.step(action_na[0])
-        reward_sum += reward.astype(np.float32).item()
-        state = tf.constant(state, dtype=tf.float32)
-
-        screen = env.render(mode='rgb_array')
-
-        if done:
-            break
-
-    return reward_sum
 
 ####
 # Hparams
