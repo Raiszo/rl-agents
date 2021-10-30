@@ -21,8 +21,8 @@ np.random.seed(seed)
 eps = np.finfo(np.float32).eps.item()
 
 # Create the environment
-def get_env(env_name: str = 'Pendulum-v0') -> gym.Env:
-    env = gym.make(env_name)
+def get_env(env_name: str, **kwargs) -> gym.Env:
+    env = gym.make(env_name, **kwargs)
     env.seed(seed)
     return env
 
@@ -518,7 +518,7 @@ if __name__ == '__main__':
     ####
     # base dir is experiments/trials
     run_experiment(
-        environment='Pendulum-v0',
+        environment='Pendulum-v1',
         n_iterations=600, iteration_size=2048,
         n_epochs=10, minibatch_size=64,
         gamma=0.99,
