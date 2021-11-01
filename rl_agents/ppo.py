@@ -1,4 +1,4 @@
-from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict, Optional
+from typing import Any, List, Sequence, Tuple, Callable, NoReturn, Dict, Optional, Tuple
 import datetime
 from os import path
 import uuid
@@ -12,10 +12,11 @@ from tensorboard.plugins.hparams import api as hp
 import gym
 from gym.spaces import Discrete, Box
 
+from rl_agents.utils import simple_advantage, gae_advantage
+
 # Set seed for experiment reproducibility
 seed = 42
 tf.random.set_seed(seed)
-np.random.seed(seed)
 
 # Small epsilon value for stabilizing division operations
 eps = np.finfo(np.float32).eps.item()
@@ -107,6 +108,7 @@ def get_model(obs_dim: int, act_dim: int, actor_output_activation: str) -> Tuple
 
 
 TFStep = Callable[[tf.Tensor], List[tf.Tensor]]
+TFReset = Callable[[], tf.Tensor]
 
 def get_env_step(env: gym.Env) -> TFStep:
     """
@@ -128,7 +130,7 @@ def get_env_step(env: gym.Env) -> TFStep:
 
     return tf_env_step
 
-def get_env_reset(env: gym.Env) -> Callable[[], tf.Tensor]:
+def get_env_reset(env: gym.Env) -> TFReset:
     """
     Return a Tensorflow function that wraps OpenAI Gym's `env.restart` call
     This would allow it to be included in a callable TensorFlow graph.
@@ -146,9 +148,8 @@ def get_env_reset(env: gym.Env) -> Callable[[], tf.Tensor]:
     return tf_env_reset
 
 def run_rollout(
-        env: gym.Env,
         env_step: TFStep,
-        env_reset: TFStep,
+        env_reset: TFReset,
         initial_state: tf.Tensor,
         actor: tf.keras.Model,
         critic: tf.keras.Model,
@@ -165,7 +166,8 @@ def run_rollout(
 
     initial_state_shape = initial_state.shape
     state = initial_state
-    # state = initial_state
+    last_done = tf.constant(False, dtype=tf.bool)
+    done_shape = last_done.shape
 
     # first episode
     j = 0
@@ -207,8 +209,10 @@ def run_rollout(
 
         # store dones
         dones = dones.write(t, done)
+        last_done = tf.cast(done, tf.bool)
+        last_done.set_shape(done_shape)
 
-        if tf.cast(done, tf.bool):
+        if last_done:
             state = env_reset()
             # need this for @tf.function
             state.set_shape(initial_state_shape)
@@ -216,6 +220,12 @@ def run_rollout(
             j += 1
             reward_sums = reward_sums.write(j, 0.0)
 
+    # remember a rollout is a sequence of time series
+    # the last value is only needed when the loop cuts a rollout before it ends
+    # if last step lead to a reset do not listen to the state, value is 0 because it terminated
+    # else state still holds s_{t+1}, use it to calculate v_{t+1}
+    last_value = tf.constant(0.0) if last_done \
+        else tf.squeeze(critic(tf.expand_dims(state, 0)))
 
     action_log_probs = action_log_probs.stack()
     values = values.stack()
@@ -225,43 +235,8 @@ def run_rollout(
     dones = dones.stack()
     reward_sums = reward_sums.stack()
 
+    return actions, states, dones, values, last_value, rewards, action_log_probs, reward_sums
 
-    # these are simple arrays
-    return actions, states, dones, values, rewards, action_log_probs, reward_sums
-
-def get_expected_return(
-        rewards_n: tf.Tensor,
-        dones_n: tf.Tensor,
-        gamma: float) -> tf.Tensor:
-    """
-    Compute expected returns per timestep.
-
-    1 2 3 4 5(done) 6 7 8(done) 9 10
-    10 9 8(done) 7 6 5(done) 4 3 2 1
-    """
-    n = tf.shape(rewards_n)[0]
-    returns = tf.TensorArray(dtype=tf.float32, size=n)
-
-    # Start from the end of `rewards_n` and accumulate reward sums
-    # into the `returns` array
-    rewards_n = tf.cast(rewards_n[::-1], dtype=tf.float32) # sometimes int32
-    dones_n = dones_n[::-1]                                # always int32
-    discounted_sum = tf.constant(0.0)
-    discounted_sum_shape = discounted_sum.shape
-
-    for i in tf.range(n):
-        reward = rewards_n[i]
-        discounted_sum = reward + gamma * discounted_sum
-        discounted_sum.set_shape(discounted_sum_shape)
-        returns = returns.write(i, discounted_sum)
-
-        # if current is done, reset discounted sum
-        if i < n-1 and tf.cast(dones_n[i+1], tf.bool):
-            discounted_sum = tf.constant(0.0)
-
-    returns = returns.stack()[::-1]
-
-    return returns
 
 def compute_loss(
         critic_loss_fn: tf.keras.losses.Loss, # bad type hint :c
@@ -269,35 +244,31 @@ def compute_loss(
         critic: tf.keras.Model,
         actions_na: tf.Tensor,
         states_no: tf.Tensor,
+        dr_n1: tf.Tensor,
         old_log_probs_n1: tf.Tensor,
-        returns_n1: tf.Tensor,
+        advs_n1: tf.Tensor,
         epsilon=0.2) -> tf.Tensor:
     """Computes the combined actor-critic loss."""
 
     # doing the forward pass
-    action_dists, values_n1 = actor(states_no), critic(states_no)
+    action_pred_dists, values_pred_n1 = actor(states_no), critic(states_no)
 
-    adv_n1 = returns_n1 - values_n1
-    adv_n1 = ((adv_n1 - tf.math.reduce_mean(adv_n1)) /
-              (tf.math.reduce_std(adv_n1) + eps))
+    adv_norm = ((advs_n1 - tf.math.reduce_mean(advs_n1)) /
+                (tf.math.reduce_std(advs_n1) + eps))
     # remember if action is countinuous and space > 1, need to sum the log_props
-    log_probs_n1 = tf.reduce_mean(action_dists.log_prob(actions_na), axis=1, keepdims=True)
-    ratio_n = tf.exp(log_probs_n1 - old_log_probs_n1)
+    log_probs_pred_n1 = tf.reduce_mean(action_pred_dists.log_prob(actions_na), axis=1, keepdims=True)
+    ratio_n = tf.exp(log_probs_pred_n1 - old_log_probs_n1)
     clipped_ratio_n = tf.clip_by_value(ratio_n, 1.0 - epsilon, 1.0 + epsilon)
 
-
-    surrogate_min = tf.minimum(ratio_n * adv_n1, clipped_ratio_n * adv_n1)
+    surrogate_min = tf.minimum(ratio_n * adv_norm, clipped_ratio_n * adv_norm)
     surrogate_min = tf.reduce_mean(surrogate_min)
-    critic_loss = critic_loss_fn(returns_n1, values_n1)
+    critic_loss = critic_loss_fn(values_pred_n1, dr_n1)
 
-    return -surrogate_min + 0.5*critic_loss - 0.01*tf.reduce_mean(action_dists.entropy())
-
-TFStep = Callable[[tf.Tensor], List[tf.Tensor]]
+    return -surrogate_min + 0.5*critic_loss - 0.01*tf.reduce_mean(action_pred_dists.entropy())
 
 def get_train_step(
-        env: gym.Env,
         env_step: TFStep,
-        env_reset: TFStep,
+        env_reset: TFReset,
         actor: tf.keras.Model, old_actor: tf.keras.Model,
         critic: tf.keras.Model,
         critic_loss_fn: tf.keras.losses.Loss,
@@ -313,28 +284,26 @@ def get_train_step(
         """Runs a model training step."""
 
         # Run the model for T=max_steps_per_iteration to collect training data using old_actor
-        actions_na, states_no, dones_n, values_n, rewards_n, old_log_probs_n, reward_sums = run_rollout(
-            env, env_step, env_reset, initial_state, old_actor, critic, iteration_size)
+        actions_na, states_no, dones_n, values_n, last_value, rewards_n, old_log_probs_n, reward_sums = run_rollout(
+            env_step, env_reset, initial_state, old_actor, critic, iteration_size)
 
-        # Calculate expected returns
-        # print('before get_expected_return', rewards_n)
-        returns_n = get_expected_return(rewards_n, dones_n, gamma)
+        # adv_n, dr_n = simple_advantage(rewards_n, dones_n, values_n, gamma)
+        adv_n, dr_n = gae_advantage(rewards_n, dones_n, values_n, last_value, gamma, lam=0.95)
 
         # Convert training data to appropriate TF tensor shapes
-        old_log_probs_n1, values_n1, returns_n1, dones_n1 = [
-            tf.expand_dims(x, 1) for x in [old_log_probs_n, values_n, returns_n, dones_n]]
+        old_log_probs_n1, adv_n1, dr_n1 = [
+            tf.expand_dims(x, 1) for x in [old_log_probs_n, adv_n, dr_n]]
 
-        ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, returns_n1))
+        ds = tf.data.Dataset.from_tensor_slices((actions_na, states_no, old_log_probs_n1, adv_n1, dr_n1))
         ds = ds.shuffle(512).batch(minibatch_size).repeat(n_epochs)
 
-        for actions, states, old_log_probs, returns in ds:
+        for actions, states, old_log_probs, advs, drs in ds:
             # inside the tape actor & critic mus do a fordward computation
             # this fordward pass was done before in the rollout function, but, since
             # now the old_actor is the one running doing it, need to redo it inside compute_loss
-            # print(actions, states, old_log_probs, returns)
             with tf.GradientTape() as act_tape, tf.GradientTape() as crt_tape:
                 # Calculating loss values to update our network
-                loss = compute_loss(critic_loss_fn, actor, critic, actions, states, old_log_probs, returns)
+                loss = compute_loss(critic_loss_fn, actor, critic, actions, states, drs, old_log_probs, advs)
 
             # Compute the gradients from the loss
             actor_grads = act_tape.gradient(loss, actor.trainable_variables)
@@ -380,7 +349,7 @@ def run_experiment(
         actor_lr: float, critic_lr: float,
         actor_output_activation: str,
         base_dir: str,
-        early_stop_reward_threshold: Optional[int]=None) -> [tf.keras.Model, tf.keras.Model]:
+        early_stop_reward_threshold: Optional[int]=None) -> Tuple[tf.keras.Model, tf.keras.Model]:
     """
     Returns
     trained_models: tuple of the trained [actor, critic] keras models
@@ -429,7 +398,7 @@ def run_experiment(
     gamma = 0.99
 
     train_step = get_train_step(
-        env, env_step, env_reset,
+        env_step, env_reset,
         actor=actor, old_actor=old_actor, critic=critic,
         critic_loss_fn=mse_loss,
         actor_optimizer=actor_opt, critic_optimizer=critic_opt,
