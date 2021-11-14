@@ -22,7 +22,7 @@ tf.random.set_seed(seed)
 eps = np.finfo(np.float32).eps.item()
 
 # Create the environment
-def get_env(env_name: str, **kwargs) -> gym.Env:
+def get_env(env_name: str, **kwargs) -> gym.Wrapper:
     env = gym.make(env_name, **kwargs)
     env.seed(seed)
     return env
@@ -110,7 +110,7 @@ def get_model(obs_dim: int, act_dim: int, actor_output_activation: str) -> Tuple
 TFStep = Callable[[tf.Tensor], List[tf.Tensor]]
 TFReset = Callable[[], tf.Tensor]
 
-def get_env_step(env: gym.Env) -> TFStep:
+def get_env_step(env: gym.Wrapper) -> TFStep:
     """
     Return a Tensorflow function that wraps OpenAI Gym's `env.step` call
     This would allow it to be included in a callable TensorFlow graph.
@@ -130,7 +130,7 @@ def get_env_step(env: gym.Env) -> TFStep:
 
     return tf_env_step
 
-def get_env_reset(env: gym.Env) -> TFReset:
+def get_env_reset(env: gym.Wrapper) -> TFReset:
     """
     Return a Tensorflow function that wraps OpenAI Gym's `env.restart` call
     This would allow it to be included in a callable TensorFlow graph.

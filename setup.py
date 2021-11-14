@@ -6,8 +6,8 @@ setup(
     install_requires=[
         'tensorflow==2.5.1',
         'tensorflow-probability==0.12.1',
-        'gym[box2d]',
-        'tensorboard==2.4.1',
+        'gym',
+        'tensorboard==2.5',
         'tqdm==4.59.0'
     ]
 )
